@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hmac
 import io
+import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
@@ -136,7 +138,29 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Reflect Similarity Service", lifespan=lifespan)
+# Shared secret for deployments where this service is reachable from the internet
+# (e.g. a tunnel from the demo laptop to a Vercel-hosted app). When set, every
+# request except GET /health must carry "Authorization: Bearer <token>", and the
+# interactive docs are disabled. Unset = local-only laptop demo, no auth.
+SERVICE_TOKEN = os.environ.get("SIMILARITY_SERVICE_TOKEN", "")
+
+app = FastAPI(
+    title="Reflect Similarity Service",
+    lifespan=lifespan,
+    docs_url=None if SERVICE_TOKEN else "/docs",
+    redoc_url=None if SERVICE_TOKEN else "/redoc",
+    openapi_url=None if SERVICE_TOKEN else "/openapi.json",
+)
+
+
+@app.middleware("http")
+async def require_token(request: Request, call_next):
+    if SERVICE_TOKEN and not (request.method == "GET" and request.url.path == "/health"):
+        supplied = request.headers.get("authorization", "")
+        expected = f"Bearer {SERVICE_TOKEN}"
+        if not hmac.compare_digest(supplied.encode(), expected.encode()):
+            return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    return await call_next(request)
 
 
 @app.get("/health")
