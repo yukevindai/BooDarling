@@ -50,3 +50,6 @@ export type RateResult =
 export type CritiqueRequest = { capture: Capture; result: RateResult };
 export type CritiqueResponse = { sessionId: string; text: string; source: "model" | "preset" };
 export type SpeechRequest = { sessionId: string; text: string }; // text <= 500 chars -> audio
+
+/** What the visitor asked the mirror to judge: "fairest" → costume (Aura), "scariest" → scare face (BooCamp). */
+export type JudgeMode = "costume" | "scare";

@@ -20,6 +20,11 @@
   text-transform: uppercase;
   flex: none;
 }
+/* second board's title in the ribbon */
+.ribbonTitle:not(:first-child) {
+  padding-left: 14px;
+  border-left: 1px solid rgba(217, 169, 79, 0.45);
+}
 .ribbonList {
   display: flex;
   gap: 18px;

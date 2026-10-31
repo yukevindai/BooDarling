@@ -1,7 +1,7 @@
 "use client";
 /**
- * BooCamp (spec §9): one five-second scary-face challenge after the outfit
- * verdict. Shows guidance, a countdown and a live meter, reveals a separate
+ * BooCamp (spec §9): one five-second scary-face challenge (the mirror's
+ * "scariest" mode). Shows guidance, a countdown and a live meter, reveals a separate
  * Scare Score, then calls onDone. Skips itself if the face can't be tracked.
  */
 import { useEffect, useRef, type RefObject } from "react";
@@ -17,6 +17,8 @@ type Props = {
   onSay?: (text: string) => void;
   /** Called once with the Scare Score, or null if skipped. */
   onDone: (score: number | null) => void;
+  /** Line shown/spoken when the face can't be read (defaults to LINES.skipped). */
+  skipLine?: string;
 };
 
 const LINES = {
@@ -26,7 +28,7 @@ const LINES = {
 };
 const REVEAL_MS = 3500;
 
-export default function BooCamp({ videoRef, runId, onSay, onDone }: Props) {
+export default function BooCamp({ videoRef, runId, onSay, onDone, skipLine = LINES.skipped }: Props) {
   const st = useBooCamp(videoRef, runId);
   const said = useRef<string>("");
   const doneRef = useRef(onDone);
@@ -41,9 +43,9 @@ export default function BooCamp({ videoRef, runId, onSay, onDone }: Props) {
     said.current = key;
     if (st.phase === "baseline") sayRef.current?.(LINES.baseline);
     if (st.phase === "challenge") sayRef.current?.(LINES.challenge);
-    if (st.phase === "skipped") sayRef.current?.(LINES.skipped);
+    if (st.phase === "skipped") sayRef.current?.(skipLine);
     if (st.phase === "done" && st.score !== null) sayRef.current?.(`Scare score: ${st.score}. ${cap(scareVerdict(st.score))}.`);
-  }, [st.phase, st.score, runId]);
+  }, [st.phase, st.score, runId, skipLine]);
 
   // Hand back after the reveal.
   useEffect(() => {
@@ -89,7 +91,7 @@ export default function BooCamp({ videoRef, runId, onSay, onDone }: Props) {
         </>
       )}
 
-      {st.phase === "skipped" && <p className={s.line}>{LINES.skipped}</p>}
+      {st.phase === "skipped" && <p className={s.line}>{skipLine}</p>}
     </div>
   );
 }

@@ -2,10 +2,10 @@
 // R1 OWNS. Hands-free state machine + UI shell. Others plug in via contracts in lib/types.ts.
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useCamera } from "@/lib/camera";
-import { initialState, reducer, verdictWord } from "@/lib/session";
+import { INTRO_LINES, SCARE_SKIPPED_LINE, initialState, reducer, verdictWord } from "@/lib/session";
 import type { Phase } from "@/lib/session";
-import { lookLabel, presenceAction, referenceImageUrl } from "@/lib/mirror";
-import type { Capture, RateResult, SilhouetteDescriptor } from "@/lib/types";
+import { lookLabel, phraseMode, presenceAction, referenceImageUrl } from "@/lib/mirror";
+import type { Capture, JudgeMode, RateResult, SilhouetteDescriptor } from "@/lib/types";
 import { getPoseDetector } from "@/lib/capture/detector";
 import type { FramingState } from "@/lib/capture/types";
 import { ReflectCamera } from "@/components/reflect/ReflectCamera";
@@ -16,23 +16,29 @@ import NameEntry from "@/components/leaderboard/NameEntry";
 import { LeaderboardBoard, LeaderboardRibbon } from "@/components/leaderboard/Leaderboard";
 import { getFaceDetector } from "@/lib/expressions/faceDetector";
 import { addEntry, clearEntries } from "@/lib/leaderboard/store";
+import { scareVerdict } from "@/lib/expressions/scare";
 import SilhouetteOverlay from "@/components/silhouette/SilhouetteOverlay";
 
-const PHRASE_OK = (t: string) => /mirror/.test(t) && /fairest/.test(t);
 const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 /** Safety net if R2 presence never reports departure while results are showing. */
 const RESULTS_TIMEOUT_MS = 120000;
 /** Without pose detection (fallback capture) nothing reports departure, so return sooner. */
 const RESULTS_TIMEOUT_FALLBACK_MS = 45000;
-/** A session started by voice/link with nobody in frame is abandoned after this long. */
+/** A costume session started by voice/link with nobody in frame is abandoned after this long. */
 const EMPTY_FRAMING_TIMEOUT_MS = 20000;
+/** Scare mode: the Baroness's intro plays before BooCamp starts its own spoken guidance. */
+const SCARE_INTRO_MS = 3000;
+/** Scare mode with no readable face: hold the skip line this long (after BooCamp's own 2 s) then wait again. */
+const SCARE_SKIP_HOLD_MS = 3500;
+/** Last-resort net if BooCamp never finishes (e.g. the face model download hangs); it normally skips itself. */
+const SCARE_TIMEOUT_MS = 60000;
 
 /** Leaderboard is shown this long before returning to waiting. */
 const BOARD_RESET_MS = 15000;
 
 type PoseStatus = "idle" | "loading" | "ready" | "error";
-// Results sub-steps (phase two, spec §9): outfit verdict -> BooCamp scare -> name -> leaderboard.
-type Step = "verdict" | "boocamp" | "name" | "board";
+// Results sub-steps. Costume: outfit verdict -> name -> leaderboard. Scare: (BooCamp in phase "scaring") -> name -> leaderboard.
+type Step = "verdict" | "name" | "board";
 type Guide = { message: string | null; progress: number };
 
 function useTypewriter(text: string | undefined, ms = 32) {
@@ -70,8 +76,10 @@ export default function Mirror() {
   const recRef = useRef<any>(null);
   const [step, setStep] = useState<Step>("verdict");
   const stepRef = useRef<Step>("verdict"); stepRef.current = step;
-  const [scare, setScare] = useState<number | null>(null);
   const [entryId, setEntryId] = useState<string | undefined>();
+  const [scareReady, setScareReady] = useState(false);
+  /** Bumped by every new line so a slow TTS fetch can't play over (or after) a newer one. */
+  const speechGen = useRef(0);
 
   // random glitch jolts on the whole frame
   useEffect(() => {
@@ -80,36 +88,39 @@ export default function Mirror() {
   }, []);
   useEffect(() => { setCanSR(!!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)); }, []);
 
-  const stopAudio = () => { audio.current?.pause(); audio.current = null; };
+  const stopAudio = () => { speechGen.current++; audio.current?.pause(); audio.current = null; };
 
   const speak = useCallback(async (text: string, id: string) => {
+    const gen = ++speechGen.current;
     try {
       const r = await fetch("/api/speech", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: id, text: text.slice(0, 500) }), signal: ctrl.current?.signal });
-      if (!r.ok || sid.current !== id) return;
-      const a = new Audio(URL.createObjectURL(await r.blob())); audio.current = a; await a.play();
+      if (!r.ok || sid.current !== id || gen !== speechGen.current) return;
+      const blob = await r.blob();
+      if (sid.current !== id || gen !== speechGen.current) return;
+      const a = new Audio(URL.createObjectURL(blob)); audio.current = a; await a.play();
     } catch { /* text stays visible */ }
   }, []);
 
-  // Start a session. Triggers: the spoken phrase (always listening while waiting) or the operator's
-  // fallback link. Arrival alone never starts a session — the visitor must ask the mirror.
-  const reveal = useCallback(() => {
+  // Start a session. Triggers: the spoken phrase (always listening while waiting) — "fairest" judges the
+  // costume, "scariest" the scare face — or the operator's fallback links. Arrival alone never starts a session.
+  const reveal = useCallback((mode: JudgeMode) => {
     if (phase.current !== "waiting") return;
-    phase.current = "framing";
+    phase.current = mode === "scare" ? "scaring" : "framing";
     const rec = recRef.current; recRef.current = null; rec?.stop(); setListening(false);
     ctrl.current?.abort(); ctrl.current = new AbortController();
     setGuide({ message: null, progress: 0 });
-    setStep("verdict"); setScare(null); setEntryId(undefined);
+    setStep("verdict"); setEntryId(undefined); setScareReady(false);
     const id = crypto.randomUUID();
     silhouette.current = null;
-    dispatch({ type: "reveal", sessionId: id });
-    speak("Well, well. Let's see what we're working with, darling.", id);
+    dispatch({ type: "reveal", sessionId: id, mode });
+    speak(INTRO_LINES[mode], id);
   }, [speak]);
 
   const reset = useCallback(() => {
     phase.current = "waiting";
     ctrl.current?.abort(); stopAudio(); setHeard(""); setGuide({ message: null, progress: 0 });
-    setStep("verdict"); setScare(null); setEntryId(undefined);
+    setStep("verdict"); setEntryId(undefined); setScareReady(false);
     dispatch({ type: "reset" });
   }, []);
 
@@ -127,7 +138,7 @@ export default function Mirror() {
     const r = new SR(); r.lang = "en-US"; r.continuous = true; r.interimResults = true;
     r.onresult = (e: any) => {
       const t = Array.from(e.results).map((x: any) => x[0].transcript).join(" ").toLowerCase();
-      setHeard(t); if (PHRASE_OK(t)) reveal();
+      setHeard(t); const mode = phraseMode(t); if (mode) reveal(mode);
     };
     let failed = false;
     r.onerror = (e: any) => {
@@ -161,6 +172,7 @@ export default function Mirror() {
       setPose("loading"); setPoseErr(null);
       getPoseDetector().then(() => setPose("ready"), (e) => { setPose("error"); setPoseErr(errText(e)); });
     }
+    getFaceDetector().catch(() => { /* BooCamp retries, then skips itself */ }); // warm for scare mode
     if (await cam.start()) dispatch({ type: "start" });
   };
 
@@ -220,24 +232,48 @@ export default function Mirror() {
     return () => clearTimeout(t);
   }, [s.phase, step, reset, fallback]);
 
-  // Phase two: warm the face model during the outfit verdict, then start BooCamp once the critique has been said.
+  // Costume: once the critique has been said, move on to the guest book.
   const rated = s.phase === "results" && s.result?.status === "ok";
   useEffect(() => {
-    if (!rated || step !== "verdict") return;
-    getFaceDetector().catch(() => {});
-    if (!s.critique) return;
-    const t = setTimeout(() => setStep("boocamp"), Math.max(7000, s.critique.length * 70));
+    if (!rated || step !== "verdict" || !s.critique) return;
+    const t = setTimeout(() => setStep("name"), Math.max(7000, s.critique.length * 70));
     return () => clearTimeout(t);
   }, [rated, step, s.critique]);
 
-  const onScareDone = useCallback((score: number | null) => { setScare(score); setStep("name"); }, []);
-  const onName = useCallback((name: string) => {
-    if (s.result?.status !== "ok") return reset();
-    const e = addEntry({ name, aura: s.result.aura, scare, lookId: s.result.lookId });
-    setEntryId(e.id); setStep("board");
-  }, [s.result, scare, reset]);
+  // Scare: let the Baroness's intro play, then start BooCamp (its model was warmed at setup).
+  useEffect(() => {
+    if (s.phase !== "scaring") return;
+    getFaceDetector().catch(() => {});
+    const intro = setTimeout(() => setScareReady(true), SCARE_INTRO_MS);
+    const net = setTimeout(reset, SCARE_TIMEOUT_MS);
+    return () => { clearTimeout(intro); clearTimeout(net); };
+  }, [s.phase, s.sessionId, reset]);
 
-  // Started by voice/link but nobody ever stepped into frame: go back to waiting.
+  const onScareDone = useCallback((score: number | null) => {
+    dispatch({ type: "scared", sessionId: sid.current, score });
+    if (score !== null) setStep("name");
+  }, []);
+
+  // Scare skipped (no face / model failed): BooCamp already said the skip line; no leaderboard entry.
+  const scareSkipped = s.phase === "results" && s.mode === "scare" && s.scare === null;
+  useEffect(() => {
+    if (!scareSkipped) return;
+    const t = setTimeout(reset, SCARE_SKIP_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [scareSkipped, reset]);
+
+  const onName = useCallback((name: string) => {
+    const e = s.mode === "scare" && typeof s.scare === "number"
+      ? addEntry({ mode: "scare", name, scare: s.scare })
+      : s.mode === "costume" && s.result?.status === "ok"
+        ? addEntry({ mode: "costume", name, aura: s.result.aura, lookId: s.result.lookId })
+        : null;
+    if (!e) return reset();
+    setEntryId(e.id); setStep("board");
+  }, [s.mode, s.scare, s.result, reset]);
+
+  // Costume session started by voice/link but nobody ever stepped into frame: go back to waiting.
+  // (Scare mode needs no equivalent: BooCamp skips itself when it can't find a face.)
   useEffect(() => {
     if (s.phase !== "framing" || fallback) return;
     const t = setTimeout(() => { if (!present.current) reset(); }, EMPTY_FRAMING_TIMEOUT_MS);
@@ -248,9 +284,12 @@ export default function Mirror() {
   const ok = s.result?.status === "ok" ? s.result : null;
   const live = s.phase === "framing" || s.phase === "capturing";
   const fogged = s.phase === "setup" || s.phase === "waiting" || s.phase === "analysing";
-  const scaring = s.phase === "results" && step === "boocamp";
-  const showShot = (s.phase === "analysing" || s.phase === "results") && s.capture && !scaring;
+  const scaring = s.phase === "scaring";
+  // Scare mode is all about the face: keep the live mirror visible through BooCamp, name entry and board.
+  const faceShown = scaring || (s.phase === "results" && s.mode === "scare");
+  const showShot = s.mode === "costume" && (s.phase === "analysing" || s.phase === "results") && s.capture;
   const cameraOn = s.phase !== "setup";
+  const myScore = s.mode === "scare" ? (s.scare ?? null) : ok?.aura ?? null;
 
   return (
     <main className="stage">
@@ -273,7 +312,7 @@ export default function Mirror() {
       <header className="head">
         <h1 className="title glitch" data-text="Boo, Darling!">Boo, Darling!</h1>
         <p></p>
-        <p className="tag">Mirror, mirror on the wall… who’s the fairest of them all?</p>
+        <p className="tag">Mirror, mirror on the wall… who’s the fairest — or the scariest — of them all?</p>
         <p className="tag tag2">Let the Baroness judge you.</p>
       </header>
       <LeaderboardRibbon />
@@ -281,7 +320,7 @@ export default function Mirror() {
       <section className={`frame ${burst ? "burst" : ""}`} aria-label="The haunted mirror">
         <div className={`glass creepy ${fogged ? "" : "clear"} ${s.phase === "analysing" ? "deep" : ""} ${s.phase === "results" ? "dark" : ""}`}>
           {/* visibility:hidden (never display:none) so the stream keeps decoding frames for R2's detector. */}
-          <video ref={cam.videoRef} muted playsInline style={{ visibility: live || scaring || s.phase === "waiting" ? "visible" : "hidden" }} />
+          <video ref={cam.videoRef} muted playsInline style={{ visibility: live || faceShown || s.phase === "waiting" ? "visible" : "hidden" }} />
           {/* R2 runs whenever the camera is on (presence in waiting/results). Armed from framing until the
               capture lands (framing → capturing keeps the same id, so no re-arm); null disarms.
               mirrored: `.glass video` is scaleX(-1) in globals.css. Guidance is drawn below in R1's style. */}
@@ -298,11 +337,15 @@ export default function Mirror() {
 
           {s.phase === "waiting" && (
             <div className="over">
-              <p className="riddle">I reveal your beauty, expose your flaws and never lie. Dare to ask who reigns fairest of them all?</p>
+              <p className="riddle">I reveal your beauty, expose your flaws and never lie. Dare to ask who reigns fairest — or scariest — of them all?</p>
+              <p className="phrases"><b>Fairest</b> and I judge your costume. <b>Scariest</b> and I judge your most terrifying face.</p>
               <p className="cue">Speak the words, darling…</p>
               {canSR && <button className={`mic ${listening ? "live" : ""}`} onClick={listen} aria-label="Activate microphone">🎙</button>}
               <p className="heard">{heard && `“${heard}”`}</p>
-              <button className="link" onClick={reveal}>Or reveal the mirror</button>
+              <div className="links">
+                <button className="link" onClick={() => reveal("costume")}>Judge my costume</button>
+                <button className="link" onClick={() => reveal("scare")}>Judge my scare face</button>
+              </div>
             </div>
           )}
           {s.phase === "waiting" && fallback && <p className="opnote">Pose model unavailable: timed capture. Reload to retry.</p>}
@@ -320,19 +363,26 @@ export default function Mirror() {
 
           {s.phase === "analysing" && (<><div className="scan" /><div className="line glitch" data-text={s.line}>{s.line}</div></>)}
 
-          {s.phase === "results" && step !== "verdict" && ok && (
+          {/* Scare mode: intro line, then BooCamp on the live mirror. */}
+          {scaring && !scareReady && <div className="line guide">{s.line}</div>}
+          {scaring && scareReady && (
+            <BooCamp videoRef={cam.videoRef} runId={s.sessionId} onDone={onScareDone} skipLine={SCARE_SKIPPED_LINE}
+              onSay={(t) => { stopAudio(); speak(t, s.sessionId); }} />
+          )}
+          {scareSkipped && <div className="line guide">{s.line}</div>}
+
+          {s.phase === "results" && s.mode && step !== "verdict" && myScore !== null && (
             <>
-              {step === "boocamp" && (
-                <BooCamp videoRef={cam.videoRef} runId={s.sessionId} onDone={onScareDone}
-                  onSay={(t) => { stopAudio(); speak(t, s.sessionId); }} />
+              {step === "name" && (
+                <NameEntry mode={s.mode} score={myScore} onSubmit={onName}
+                  verdict={s.mode === "scare" ? scareVerdict(myScore) : verdictWord(myScore)} />
               )}
-              {step === "name" && <NameEntry aura={ok.aura} scare={scare} onSubmit={onName} />}
-              {step === "board" && <div className="over"><LeaderboardBoard highlightId={entryId} /></div>}
+              {step === "board" && <div className="over"><LeaderboardBoard mode={s.mode} highlightId={entryId} /></div>}
               {step === "board" && <button className="btn boardAgain" onClick={reset}>FACE THE MIRROR AGAIN</button>}
             </>
           )}
 
-          {s.phase === "results" && step === "verdict" && (
+          {s.phase === "results" && s.mode === "costume" && step === "verdict" && (
             <>
               {ok && <>
                 <span className="refcap">Closest look: {lookLabel(ok.lookId)}</span>
