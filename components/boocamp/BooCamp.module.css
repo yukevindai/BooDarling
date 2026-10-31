@@ -75,3 +75,45 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+
+/* face tracking indicator */
+.badge {
+  position: absolute;
+  top: 4%;
+  right: 3%;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: clamp(0.75rem, 1.6vw, 0.95rem);
+  font-style: normal;
+  letter-spacing: 0.04em;
+  background: rgba(9, 9, 9, 0.75);
+  border: 1px solid currentColor;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.badgeOn {
+  color: #4ade80;
+}
+.badgeOn .dot {
+  box-shadow: 0 0 8px currentColor;
+  animation: pulseDot 1.2s ease-in-out infinite;
+}
+.badgeOff {
+  color: #f87171;
+}
+.badgeLoading {
+  color: var(--gold);
+}
+@keyframes pulseDot {
+  50% {
+    opacity: 0.4;
+  }
+}
