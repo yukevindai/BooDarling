@@ -403,7 +403,9 @@ export default function Mirror() {
                   verdict={s.mode === "scare" ? scareVerdict(myScore) : verdictWord(myScore)} />
               )}
               {step === "board" && <div className="over"><LeaderboardBoard mode={s.mode} highlightId={entryId} /></div>}
-              {step === "board" && !boost && <button className="btn boardAgain" onClick={reset}>FACE THE MIRROR AGAIN</button>}
+              {step === "board" && (boost
+                ? <button className="btn boardAgain" onClick={() => setStep("auramax")}>SEE YOUR AURA-MAX</button>
+                : <button className="btn boardAgain" onClick={reset}>FACE THE MIRROR AGAIN</button>)}
               {step === "auramax" && boost && <AuraMaxStage stage={boost} onAgain={reset} />}
             </>
           )}
@@ -421,7 +423,10 @@ export default function Mirror() {
                   <p className="adj">{verdictWord(ok.aura)}</p>
                   <p className="crit">{typed}</p>
                 </>) : <p className="crit">{s.result && s.result.status === "unavailable" ? s.result.message : "Unable to rate this look"}</p>}
-                <button className="btn" onClick={again}>FACE THE MIRROR AGAIN</button>
+                {/* Rated: carry on through name → leaderboard → Aura-max. Unrated: nothing to continue to. */}
+                {ok
+                  ? <button className="btn" onClick={() => setStep("name")}>NEXT</button>
+                  : <button className="btn" onClick={again}>FACE THE MIRROR AGAIN</button>}
               </div>
             </>
           )}
