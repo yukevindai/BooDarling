@@ -24,6 +24,8 @@ export type CritiqueCacheKeyParts = {
   providerId: string;
   providerModel: string;
   promptVersion: string;
+  /** Garment-line phrase from the live silhouette (empty/omitted when none). */
+  silhouette?: string;
 };
 
 export function critiqueCacheKey(p: CritiqueCacheKeyParts): string {
@@ -43,6 +45,7 @@ export function critiqueCacheKey(p: CritiqueCacheKeyParts): string {
     p.providerId,
     p.providerModel,
     p.promptVersion,
+    p.silhouette ?? "",
   ]) {
     h.update(`${v.length}:`);
     h.update(v);

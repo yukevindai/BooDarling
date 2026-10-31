@@ -1,9 +1,10 @@
 # Reflect similarity service (R3). Pinned for reproducible demo builds.
 # CPU-only; no training or fine-tuning (spec §4).
+# torch 2.6.0 is the first release with CPython 3.13 wheels; it also covers 3.11/3.12.
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 transformers==4.48.0
-torch==2.5.1
+torch==2.6.0
 pillow==11.1.0
 numpy==2.2.1
 pydantic==2.10.5

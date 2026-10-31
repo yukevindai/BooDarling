@@ -14,3 +14,5 @@ services/similarity/cache/
 visitor-photos/
 # copied from node_modules at dev/build time (scripts/copy-mediapipe-wasm.mjs)
 public/mediapipe/
+.DS_Store
+.vercel/

@@ -5,7 +5,7 @@ import { useCamera } from "@/lib/camera";
 import { initialState, reducer, verdictWord } from "@/lib/session";
 import type { Phase } from "@/lib/session";
 import { lookLabel, presenceAction, referenceImageUrl } from "@/lib/mirror";
-import type { Capture, RateResult } from "@/lib/types";
+import type { Capture, RateResult, SilhouetteDescriptor } from "@/lib/types";
 import { getPoseDetector } from "@/lib/capture/detector";
 import type { FramingState } from "@/lib/capture/types";
 import { ReflectCamera } from "@/components/reflect/ReflectCamera";
@@ -16,6 +16,7 @@ import NameEntry from "@/components/leaderboard/NameEntry";
 import { LeaderboardBoard, LeaderboardRibbon } from "@/components/leaderboard/Leaderboard";
 import { getFaceDetector } from "@/lib/expressions/faceDetector";
 import { addEntry, clearEntries } from "@/lib/leaderboard/store";
+import SilhouetteOverlay from "@/components/silhouette/SilhouetteOverlay";
 
 const PHRASE_OK = (t: string) => /mirror/.test(t) && /fairest/.test(t);
 const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
@@ -57,6 +58,7 @@ export default function Mirror() {
   const phase = useRef<Phase>(s.phase); phase.current = s.phase;
   const present = useRef(false);
   const ctrl = useRef<AbortController | null>(null);
+  const silhouette = useRef<SilhouetteDescriptor | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
   const [heard, setHeard] = useState("");
   const [listening, setListening] = useState(false);
@@ -99,6 +101,7 @@ export default function Mirror() {
     setGuide({ message: null, progress: 0 });
     setStep("verdict"); setScare(null); setEntryId(undefined);
     const id = crypto.randomUUID();
+    silhouette.current = null;
     dispatch({ type: "reveal", sessionId: id });
     speak("Well, well. Let's see what we're working with, darling.", id);
   }, [speak]);
@@ -165,7 +168,11 @@ export default function Mirror() {
   const onReadyCapture = useCallback(async (capture: Capture) => {
     const id = capture.sessionId;
     if (sid.current !== id) return; // late capture from a session that already ended
-    dispatch({ type: "captured", capture });
+    const captureWithSilhouette: Capture = {
+      ...capture,
+      ...(silhouette.current ? { silhouette: silhouette.current } : {}),
+    };
+    dispatch({ type: "captured", capture: captureWithSilhouette });
     const signal = ctrl.current?.signal;
     const post = async <T,>(url: string, body: unknown): Promise<T> => {
       const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
@@ -173,14 +180,14 @@ export default function Mirror() {
     };
     try {
       let result: RateResult;
-      try { result = await post<RateResult>("/api/rate", capture); }
-      catch (e) { if (signal?.aborted) return; result = await post<RateResult>("/api/rate", capture); } // one transient retry
+      try { result = await post<RateResult>("/api/rate", captureWithSilhouette); }
+      catch (e) { if (signal?.aborted) return; result = await post<RateResult>("/api/rate", captureWithSilhouette); } // one transient retry
       if (sid.current !== id) return;
       dispatch({ type: "rated", result });
       if (result.status !== "ok") return;
       // Bounded wait; on timeout/failure R4's client falls back to the preset line for this score band.
       let text: string;
-      try { text = (await requestCritique(capture, result, { signal })).text; }
+      try { text = (await requestCritique(captureWithSilhouette, result, { signal })).text; }
       catch (e) { if (isCritiqueDiscarded(e)) return; throw e; } // visitor left / stale: show nothing
       if (sid.current !== id) return;
       dispatch({ type: "critique", text }); speak(text, id);
@@ -278,6 +285,8 @@ export default function Mirror() {
               onReadyCapture={onReadyCapture} onPresenceChange={onPresenceChange} onFramingChange={onFramingChange}
               onReady={onPoseReady} onError={onPoseError} />
           )}
+          {live && <SilhouetteOverlay videoRef={cam.videoRef} active={live}
+            onDescriptor={(descriptor) => { silhouette.current = descriptor; }} />}
           {showShot && <img className="shot" alt="Your captured look" src={s.capture!.outfitImage} />}
           <div className={`fog ${fogged ? "on" : "off"}`} />
 

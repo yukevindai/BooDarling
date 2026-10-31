@@ -4,10 +4,14 @@
  * POST /api/rate without importing R1's file. If R1 changes `Capture`,
  * update this to match (or swap to `import type { Capture } from "../types"`).
  */
+import type { SilhouetteDescriptor } from "../types";
+
 export type CapturePayload = {
   sessionId: string;
   /** JPEG data URL; decoded image <= 1 MB. */
   outfitImage: string;
+  /** Optional live silhouette read (MediaPipe Image Segmenter, client-side). */
+  silhouette?: SilhouetteDescriptor;
 };
 
 export type Landmark = { x: number; y: number; z?: number; visibility?: number };

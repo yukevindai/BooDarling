@@ -9,7 +9,7 @@ import type { CriticInput } from "./critic/types";
 import { scoreBand, type ScoreBand } from "./critic/lines";
 
 /** Bump whenever prompt wording changes (part of the critique cache key). */
-export const PROMPT_VERSION = "baroness-v1";
+export const PROMPT_VERSION = "baroness-v2";
 
 /** Soft target for the whole critique (keeps TTS short). */
 export const CRITIQUE_TARGET_CHARS = 260;
@@ -58,6 +58,12 @@ export function buildBaronessUserPrompt(input: CriticInput): string {
     `Matched look: ${label}.`,
   ];
   if (description) lines.push(`Reference look notes (curated, may help you name garments): ${description}`);
+  if (input.silhouette) {
+    lines.push(
+      `Live silhouette read of the visitor's outfit (from automatic image segmentation): ${clean(input.silhouette, 160)}.`,
+      "You may weave in one remark about how this overall silhouette/line compares with the reference — but speak of the garment's shape and line only, never the body.",
+    );
+  }
   lines.push(
     `Computed Aura score: ${aura} out of 100 (already final — do not mention or change it).`,
     `Score band: ${BAND_TONE[scoreBand(aura)]}`,
