@@ -1,11 +1,15 @@
-// R4 OWNS. MOCK: replace with Qwen3-VL / Gemini critic. Never changes the score.
+// R4 OWNS. Critique endpoint: { capture, result } -> { sessionId, text, source }.
+// Delegates to the server-side orchestrator, which resolves the reference image,
+// calls the configured critic provider (gemini | ollama | mock), and falls back to
+// a preset line on any failure. Never computes or changes the Aura score.
 import { NextResponse } from "next/server";
-import type { CritiqueRequest, CritiqueResponse } from "@/lib/types";
+import { createCritique } from "@/lib/critic/critique";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const { capture } = (await req.json()) as CritiqueRequest;
-  return NextResponse.json({
-    sessionId: capture.sessionId, source: "preset",
-    text: "Finally, someone who understands the importance of making an entrance. Now do try to finish what you started, darling.",
-  } satisfies CritiqueResponse);
+  const body = await req.json().catch(() => null);
+  const outcome = await createCritique(body, { signal: req.signal });
+  return NextResponse.json(outcome.body, { status: outcome.status });
 }

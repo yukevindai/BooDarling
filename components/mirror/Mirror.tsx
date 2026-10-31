@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useCamera } from "@/lib/camera";
 import { initialState, reducer, verdictWord } from "@/lib/session";
-import type { Capture, CritiqueResponse, RateResult } from "@/lib/types";
+import type { Capture, CritiqueResponse, RateResult, SilhouetteDescriptor } from "@/lib/types";
 import CaptureStub from "@/components/reflect/CaptureStub";
+import SilhouetteOverlay from "@/components/silhouette/SilhouetteOverlay";
 
 const PHRASE_OK = (t: string) => /mirror/.test(t) && /fairest/.test(t);
 const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
@@ -25,6 +26,7 @@ export default function Mirror() {
   const cam = useCamera();
   const sid = useRef(""); sid.current = s.sessionId;
   const ctrl = useRef<AbortController | null>(null);
+  const sil = useRef<SilhouetteDescriptor | null>(null); // latest live silhouette read
   const audio = useRef<HTMLAudioElement | null>(null);
   const [heard, setHeard] = useState("");
   const [listening, setListening] = useState(false);
@@ -54,6 +56,7 @@ export default function Mirror() {
     recRef.current?.stop(); setListening(false);
     ctrl.current?.abort(); ctrl.current = new AbortController();
     const id = crypto.randomUUID();
+    sil.current = null; // fresh silhouette per visitor
     dispatch({ type: "reveal", sessionId: id });
     speak("Well, well. Let's see what we're working with, darling.", id);
   }, [speak]);
@@ -80,7 +83,9 @@ export default function Mirror() {
   };
 
   // pipeline: capture -> rate -> critique -> speak
-  const onReadyCapture = useCallback(async (capture: Capture) => {
+  const onReadyCapture = useCallback(async (raw: Capture) => {
+    // Attach the latest live silhouette read so the critique can comment on it.
+    const capture: Capture = sil.current ? { ...raw, silhouette: sil.current } : raw;
     const id = capture.sessionId; dispatch({ type: "captured", capture });
     const signal = ctrl.current?.signal;
     const post = async <T,>(url: string, body: unknown): Promise<T> => {
@@ -132,6 +137,7 @@ export default function Mirror() {
       <section className={`frame ${burst ? "burst" : ""}`} aria-label="The haunted mirror">
         <div className={`glass creepy ${fogged ? "" : "clear"} ${s.phase === "analysing" ? "deep" : ""} ${s.phase === "results" ? "dark" : ""}`}>
           <video ref={cam.videoRef} muted playsInline style={{ visibility: live || s.phase === "waiting" ? "visible" : "hidden" }} />
+          {live && <SilhouetteOverlay videoRef={cam.videoRef} active={live} onDescriptor={(d) => { sil.current = d; }} />}
           {showShot && <img className="shot" alt="Your captured look" src={s.capture!.outfitImage} />}
           <div className={`fog ${fogged ? "on" : "off"}`} />
 

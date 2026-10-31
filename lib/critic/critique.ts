@@ -60,6 +60,8 @@ type ValidOk = {
   modelVersion: string;
   referenceVersion: string;
   calibrationVersion: string;
+  /** Sanitized garment-line phrase from the live silhouette, if provided. */
+  silhouette?: string;
 };
 type ValidUnavailable = { kind: "unavailable"; sessionId: string };
 
@@ -103,6 +105,15 @@ export function validateCritiqueRequest(body: unknown): { ok: true; value: Valid
   const img = parseImageDataUrl(capture.outfitImage);
   if (!img.ok) return { ok: false, error: `capture.${img.error}` };
 
+  // Optional silhouette: accept only a clean, short garment-line phrase; ignore
+  // the rest of the descriptor. Never fail the request over it.
+  let silhouette: string | undefined;
+  const sil = (capture as { silhouette?: unknown }).silhouette;
+  if (isObj(sil) && typeof sil.phrase === "string") {
+    const phrase = sil.phrase.replace(/\s+/g, " ").trim();
+    if (phrase && phrase.length <= 160 && !CONTROL_CHARS.test(phrase)) silhouette = phrase;
+  }
+
   return {
     ok: true,
     value: {
@@ -116,6 +127,7 @@ export function validateCritiqueRequest(body: unknown): { ok: true; value: Valid
       modelVersion: r.modelVersion ?? "",
       referenceVersion: r.referenceVersion ?? "",
       calibrationVersion: r.calibrationVersion ?? "",
+      silhouette,
     },
   };
 }
@@ -206,6 +218,7 @@ export async function createCritique(body: unknown, opts: CreateCritiqueOptions 
     providerId: provider.id,
     providerModel: provider.model,
     promptVersion: PROMPT_VERSION,
+    silhouette: req.silhouette ?? "",
   });
   const cached = cache?.get(cacheKey);
   if (cached) return finish(cached, "model", "cache-hit");
@@ -217,6 +230,7 @@ export async function createCritique(body: unknown, opts: CreateCritiqueOptions 
     lookId: ref.lookId,
     lookLabel: ref.lookLabel,
     lookDescription: ref.lookDescription,
+    silhouette: req.silhouette,
   };
 
   while (attempts < 2) {

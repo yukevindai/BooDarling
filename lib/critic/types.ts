@@ -68,6 +68,8 @@ export type CriticInput = {
   lookLabel: string;
   /** Optional curated description of the reference look (from the manifest). */
   lookDescription?: string;
+  /** Optional garment-line phrase from the live silhouette (client segmentation). */
+  silhouette?: string;
 };
 
 export interface CriticProvider {
