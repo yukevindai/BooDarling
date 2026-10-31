@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Pirata_One, Cormorant_Garamond } from "next/font/google";
+import { Beth_Ellen, Caudex } from "next/font/google";
 import "./globals.css";
 
-const display = Pirata_One({ weight: "400", subsets: ["latin"], variable: "--font-display" });
-const serif = Cormorant_Garamond({ weight: ["400", "600", "700"], style: ["normal", "italic"], subsets: ["latin"], variable: "--font-serif" });
+const display = Beth_Ellen({ weight: "400", subsets: ["latin"], variable: "--font-display" });
+const serif = Caudex({ weight: ["400", "700"], style: ["normal", "italic"], subsets: ["latin"], variable: "--font-serif" });
 
 export const metadata: Metadata = { title: "Boo, Darling!", description: "Let the Baroness judge you." };
 
