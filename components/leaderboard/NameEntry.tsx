@@ -5,16 +5,22 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { ANONYMOUS } from "@/lib/leaderboard/store";
+import type { JudgeMode } from "@/lib/types";
+import { BOARDS } from "./Leaderboard";
 import s from "./Leaderboard.module.css";
 
 type Props = {
-  aura: number;
-  scare: number | null;
+  /** Which board the score goes on. */
+  mode: JudgeMode;
+  /** Aura (costume) or Scare Score (scare). */
+  score: number;
+  /** Verdict words shown with the score (verdictWord / scareVerdict). */
+  verdict?: string;
   onSubmit: (name: string) => void;
   timeoutMs?: number;
 };
 
-export default function NameEntry({ aura, scare, onSubmit, timeoutMs = 25000 }: Props) {
+export default function NameEntry({ mode, score, verdict, onSubmit, timeoutMs = 25000 }: Props) {
   const [name, setName] = useState("");
   const [left, setLeft] = useState(Math.ceil(timeoutMs / 1000));
   const sent = useRef(false);
@@ -54,7 +60,10 @@ export default function NameEntry({ aura, scare, onSubmit, timeoutMs = 25000 }: 
     >
       <p className={s.entryTitle}>Sign the Baroness&apos;s guest book</p>
       <p className={s.entryScores}>
-        Aura <b>{aura}</b> · Scare <b>{scare ?? "–"}</b>
+        {BOARDS[mode].score} <b>{score}</b>
+        {verdict && <> · {verdict}</>}
+        <br />
+        for the <b>{BOARDS[mode].title}</b> board
       </p>
       <input
         className={s.input}
