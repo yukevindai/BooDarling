@@ -1,0 +1,125 @@
+/* OWNER: R1 (Integration/UI). Minimal shared styling placeholder. Palette: black,
+   ivory, red (spec §1). R3 adds Aura harness styles below; final theme is R1's. */
+
+:root {
+  --ink: #0b0b0b;
+  --ivory: #f5f0e6;
+  --red: #c91825;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--ink);
+  color: var(--ivory);
+  font-family: "Didot", "Bodoni MT", Georgia, "Times New Roman", serif;
+}
+
+/* ---- R3 Aura score ---- */
+
+.r3-aura {
+  margin: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1;
+}
+
+.r3-aura__num {
+  font-size: 6rem;
+  font-weight: 700;
+  color: var(--red);
+  letter-spacing: 0.02em;
+}
+
+.r3-aura__label {
+  margin-top: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+/* ---- Demo harness ---- */
+
+.demo-wrap {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+
+.demo-title {
+  font-size: 2.4rem;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.25rem;
+}
+
+.demo-sub {
+  margin: 0 0 1.5rem;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.demo-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.demo-btn {
+  font: inherit;
+  padding: 0.6rem 1.2rem;
+  background: var(--ivory);
+  color: var(--ink);
+  border: none;
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+}
+
+.demo-btn--ghost {
+  background: transparent;
+  color: var(--ivory);
+  border: 1px solid var(--ivory);
+}
+
+.demo-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.demo-result {
+  margin-top: 2rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.demo-result img {
+  width: 100%;
+  border: 2px solid var(--red);
+}
+
+.demo-meta {
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #141414;
+  padding: 1rem;
+  border: 1px solid #2a2a2a;
+}
+
+@media (max-width: 720px) {
+  .demo-result {
+    grid-template-columns: 1fr;
+  }
+}
