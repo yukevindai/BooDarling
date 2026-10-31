@@ -97,3 +97,6 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
 
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition-duration:.01ms!important}}
 @media (max-width:600px){.frame{aspect-ratio:3/4}}
+
+/* phase two: leaderboard "again" button sits above the board */
+.boardAgain{position:absolute;z-index:9;left:50%;bottom:4%;transform:translateX(-50%)}
