@@ -10,10 +10,13 @@
  *    (looks may also be an object keyed by lookId)
  * Image path keys: imagePath | image | path | file | src (relative to the
  * project root, starting with `public/`, or a public URL path like `/references/...`).
+ * A look may also carry a Halloween Aura-max `checklist` (see lib/critic/aura-max.ts);
+ * unknown keys are ignored.
  */
 import { stat, readFile } from "node:fs/promises";
 import path from "node:path";
 import { projectRoot, referencesManifestPath } from "./config";
+import { parseChecklist, type ChecklistItem } from "./aura-max";
 import { isInsideRoot } from "./images";
 
 export type ResolvedReference = {
@@ -23,6 +26,8 @@ export type ResolvedReference = {
   lookDescription?: string;
   /** Absolute path inside the project root. */
   imagePath: string;
+  /** The look's Aura-max checklist (priority order); omitted when the look has none. */
+  checklist?: ChecklistItem[];
 };
 
 type Entry = {
@@ -38,8 +43,10 @@ type Parsed = {
   mtimeMs: number;
   size: number;
   entries: Map<string, Entry>;
-  looks: Map<string, { label?: string; description?: string }>;
+  looks: Map<string, LookMeta>;
 };
+
+type LookMeta = { label?: string; description?: string; checklist?: ChecklistItem[] };
 
 let cached: Parsed | null = null;
 
@@ -94,14 +101,15 @@ function addRef(
 /** Exported for tests: parse manifest JSON into reference entries. */
 export function parseManifest(json: unknown): Pick<Parsed, "entries" | "looks"> {
   const entries = new Map<string, Entry>();
-  const looks = new Map<string, { label?: string; description?: string }>();
+  const looks = new Map<string, LookMeta>();
 
   const visitLook = (lookRaw: unknown, keyLookId?: string) => {
     if (!isObj(lookRaw)) return;
     const lookId = str(lookRaw.lookId) ?? str(lookRaw.id) ?? keyLookId;
     const label = firstStr(lookRaw, LABEL_KEYS);
     const description = str(lookRaw.description);
-    if (lookId) looks.set(lookId, { label, description });
+    const checklist = parseChecklist(lookRaw.checklist);
+    if (lookId) looks.set(lookId, { label, description, ...(checklist.length ? { checklist } : {}) });
     const refs = lookRaw.references ?? lookRaw.images ?? lookRaw.refs;
     if (Array.isArray(refs)) for (const r of refs) addRef(entries, r, { lookId, label, description });
   };
@@ -207,6 +215,7 @@ export async function resolveReference(referenceId: string, expectedLookId?: str
     lookLabel: entry.lookLabel ?? meta?.label ?? humaniseLookId(lookId),
     lookDescription: entry.lookDescription ?? meta?.description,
     imagePath,
+    ...(meta?.checklist ? { checklist: meta.checklist } : {}),
   };
 }
 

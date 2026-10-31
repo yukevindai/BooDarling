@@ -7,7 +7,7 @@ revealed. She **never** computes or changes the score (spec §1, §5).
 |---|---|
 | `lib/baroness-prompt.ts` | Persona + prompt (two sentences: one witty observation, one useful suggestion; clothing only) |
 | `lib/critic/` | Critic providers (Gemini / Ollama Qwen3-VL / mock), manifest lookup, sanitiser, cache, ElevenLabs client, scripted lines |
-| `app/api/critique/route.ts` | `POST {capture, result}` → `{sessionId, text, source}` · `GET` → readiness |
+| `app/api/critique/route.ts` | `POST {capture, result}` → `{sessionId, text, source, auraMax?}` · `GET` → readiness |
 | `app/api/speech/route.ts` | `POST {sessionId, text}` → `audio/mpeg` stream (text capped at 500 chars) · `GET` → readiness |
 | `components/baroness/` | `useBaroness` hook, `BaronessCritique`, `BaronessGuidance`, `AudioSetupControl`, voice controller |
 | `public/audio/baroness/` | Optional pre-generated clips for scripted lines (see its README) |
@@ -108,6 +108,68 @@ spoken lines match R2's on-screen captions word for word (enforced by
 `lib/critic/lines.test.ts`). R2's `ReflectCamera` already draws the caption, so
 `<BaronessGuidance>` is optional. Mapping: `FRAMING_TO_GUIDANCE` in `lib/critic/lines.ts`.
 
+## Aura-max (last results stage)
+
+After the leaderboard, the mirror shows an **Aura-max** stage for ~20 s
+(`AURAMAX_STEP_MS` in `lib/results-flow.ts`), then returns to waiting:
+
+- costume: scan → rate → roast → name → board → **Halloween Aura-max** → waiting
+- scare: BooCamp → name → board → **Scare Aura-max** → waiting (skipped BooCamp: no stage, as before)
+
+Departure does not end name / board / Aura-max (visitors step away to type, read or
+scan); those steps time out on their own. "Face the mirror again" lives on the
+Aura-max stage (the board keeps it only when there is no Aura-max). UI:
+`components/baroness/AuraMax.tsx` (`AuraMaxStage`, `AuraMax`, `ScareAuraMax`). The
+stage is visual only — never spoken — and never changes or predicts a score.
+
+**Costume (Halloween Aura-max).** The critic's **same** model call returns
+`{"critique": "<two sentences>", "missing": ["<checklist id>", ...]}` (Gemini:
+`responseMimeType: application/json` + a `responseSchema` whose `missing` items are an
+enum of the look's visible ids; a 400 that blames the schema retries once without it.
+Ollama: `format: "json"`. Mock: deterministic by score band). The server
+(`lib/critic/aura-max.ts`) parses it defensively (JSON, fenced JSON, truncated JSON,
+or plain text → critique only), sanitises the critique exactly as before, keeps only
+known `visibleInCrop` ids (deduped, max 3, model order), and adds to the response:
+
+```ts
+auraMax?: { lookId; lookLabel; steps: AuraMaxItem[]; finishing: AuraMaxItem[];
+            complete: boolean; source: "model" | "fallback" }   // AuraMaxItem = { id, label, why, search }
+```
+
+- model listed pieces → `steps` (most impactful first), `source: "model"`;
+- model listed none → `complete: true` ("nothing missing from your silhouette");
+- critique fell back to a preset (error, timeout, unsafe text) or the reply was plain
+  text → `steps` = the look's top visible pieces by priority, `source: "fallback"`
+  (worded "Complete the look", never "you're missing");
+- unavailable rating, unknown reference, or a look without a checklist → no `auraMax`
+  (the board then ends the session as before).
+
+`finishing` = pieces the collar-down crop cannot show (wig, makeup): always offered,
+never claimed missing. Each step gets its own QR code straight to an **Amazon.ca
+search** (`https://www.amazon.ca/s?k=<search>`; search links only, no products, no
+affiliation, no visitor data in the URL). The QRs leave our site, so nothing on the
+deployment needs to be publicly reachable for them.
+
+**Editing the checklist.** In `references/manifest.json`, on a look:
+
+```json
+"checklist": [{ "id": "opera-gloves", "label": "Crimson opera gloves", "why": "…",
+                "search": "red satin opera gloves", "visibleInCrop": true, "priority": 2 }]
+```
+
+`id` is lowercase-kebab (≤ 48 chars); lower `priority` = more important;
+`visibleInCrop` must be `true` only for pieces a collar-down crop can show (it
+defaults to `false`). Changing it changes the prompt (the critique cache key already
+includes `PROMPT_VERSION`; bump that if you reword the prompt). The similarity
+service ignores the key, so no re-embedding or recalibration is needed.
+
+**Scare (Scare Aura-max).** No model, no shopping, no QR. `ScareMeter` records
+per-feature intensities (brows, eyes, jaw, sneer, mouth, smile) and `breakdown()`
+averages them over the same top-third frames as `final()`. `scareTips()` returns 1–3
+tips: a smile tip first if smiling cost ≥ 3 points, then the features with the
+biggest weighted shortfall; "flawless fright" if nothing is short (or score ≥ 95).
+BooCamp passes them as `onDone(score, tips)` (second argument is optional/additive).
+
 ## Dependencies on other roles
 
 - **R1:** `lib/types.ts` must export `Capture` and `RateResult` exactly as in
@@ -115,7 +177,7 @@ spoken lines match R2's on-screen captions word for word (enforced by
   devDependency and these scripts:
   `"test:baroness": "tsx --test lib/critic/*.test.ts lib/*.test.ts components/baroness/*.test.ts app/api/speech/route.test.ts"`,
   `"audio:generate": "tsx lib/critic/generate-audio.ts"`, and add the env block
-  above (placeholders only) to `.env.example`. No runtime npm dependencies are needed.
+  above (placeholders only) to `.env.example`. Runtime npm dependency: `qrcode` (Aura-max QR codes).
 - **R3:** `/api/critique` resolves the reference image server-side from
   `references/manifest.json` by `referenceId`. The reader accepts
   `{looks:[{lookId, label, description, references:[{referenceId, imagePath, ...}]}]}`,

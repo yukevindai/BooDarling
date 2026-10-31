@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { getFaceDetector, readBlendshapes } from "./faceDetector";
-import { SCARE_CONFIG, ScareMeter } from "./scare";
+import { SCARE_CONFIG, ScareMeter, scareTips, type ScareTip } from "./scare";
 
 export type BooPhase = "loading" | "baseline" | "challenge" | "done" | "skipped";
 export type BooState = {
@@ -19,6 +19,8 @@ export type BooState = {
   /** Final Scare Score once done (null when skipped). */
   score: number | null;
   faceVisible: boolean;
+  /** Scare Aura-max expression tips once done (from the frames behind the score). */
+  tips?: ScareTip[];
 };
 
 const FPS = 15;
@@ -43,7 +45,8 @@ export function useBooCamp(videoRef: RefObject<HTMLVideoElement | null>, runId: 
     const finish = (p: "done" | "skipped", score: number | null) => {
       phase = p;
       cancelAnimationFrame(raf);
-      setState((s) => ({ ...s, phase: p, score, secondsLeft: 0 }));
+      const tips = p === "done" ? scareTips(meter.breakdown(), score, cfg) : undefined;
+      setState((s) => ({ ...s, phase: p, score, secondsLeft: 0, tips }));
     };
 
     getFaceDetector()

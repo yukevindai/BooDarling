@@ -16,6 +16,8 @@ export function buildOllamaRequest(input: CriticInput, model: string, withThinkF
     stream: false,
     ...(withThinkFlag && !thinkUnsupported.has(model) ? { think: false } : {}),
     keep_alive: "30m",
+    // JSON mode: one reply carries {critique, missing} (Aura-max) with no extra call.
+    format: "json",
     messages: [
       { role: "system", content: BARONESS_SYSTEM_PROMPT },
       {
@@ -25,7 +27,7 @@ export function buildOllamaRequest(input: CriticInput, model: string, withThinkF
         images: [input.userImage.base64, input.referenceImage.base64],
       },
     ],
-    options: { temperature: 0.9, num_predict: 240 },
+    options: { temperature: 0.9, num_predict: 320 },
   };
 }
 

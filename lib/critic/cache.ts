@@ -95,5 +95,8 @@ export class LruCache<V> {
   }
 }
 
-/** Process-wide critique text cache (model-sourced text only). */
-export const critiqueCache = new LruCache<string>(200, 30 * 60_000);
+/** A cached model critique plus the Aura-max ids it reported missing (null = unknown). */
+export type CachedCritique = { text: string; missing: string[] | null };
+
+/** Process-wide critique cache (model-sourced results only). */
+export const critiqueCache = new LruCache<CachedCritique>(200, 30 * 60_000);

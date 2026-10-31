@@ -64,7 +64,57 @@
           }
         }
       ],
-      "label": "Red Glamour"
+      "label": "Red Glamour",
+      "checklist": [
+        {
+          "id": "crimson-gown",
+          "label": "Crimson satin gown",
+          "why": "The whole look starts here: blood-red satin with a halter neck and a mermaid line that flares at the hem.",
+          "search": "red satin halter mermaid gown costume",
+          "visibleInCrop": true,
+          "priority": 1
+        },
+        {
+          "id": "opera-gloves",
+          "label": "Crimson opera gloves",
+          "why": "Elbow-length red satin gloves turn a red dress into a villain’s entrance.",
+          "search": "red satin opera gloves",
+          "visibleInCrop": true,
+          "priority": 2
+        },
+        {
+          "id": "cane",
+          "label": "Slim black cane",
+          "why": "A sleek black cane to lean on, point with, and tap impatiently.",
+          "search": "black costume cane",
+          "visibleInCrop": true,
+          "priority": 3
+        },
+        {
+          "id": "two-tone-wig",
+          "label": "Two-tone black-and-white wig",
+          "why": "Cruella’s split hair is her signature; nothing says de Vil faster.",
+          "search": "cruella wig black white",
+          "visibleInCrop": false,
+          "priority": 4
+        },
+        {
+          "id": "red-lipstick",
+          "label": "Bold red lipstick",
+          "why": "A crimson lip to match the gown, sharp enough to sign a threat.",
+          "search": "red lipstick",
+          "visibleInCrop": false,
+          "priority": 5
+        },
+        {
+          "id": "smoky-eyes",
+          "label": "Dramatic smoky eyes",
+          "why": "Dark, smudged eyes give the look its wicked glare.",
+          "search": "black smoky eye makeup kit",
+          "visibleInCrop": false,
+          "priority": 6
+        }
+      ]
     }
   ]
 }

@@ -7,6 +7,7 @@
  * thrown when the caller's signal aborted or the response belongs to another
  * session; callers should silently discard those.
  */
+import { parseAuraMax } from "@/lib/critic/aura-max";
 import { ANNOUNCEMENT_LINES, pickPresetCritique } from "@/lib/critic/lines";
 import type { Capture, CritiqueResponse, CritiqueRequest, RateResult } from "@/lib/critic/types";
 import { critiqueClientTimeoutMs, DEFAULT_CRITIQUE_CLIENT_TIMEOUT_MS } from "./timeouts";
@@ -37,7 +38,7 @@ export function isCritiqueDiscarded(e: unknown): e is CritiqueDiscardedError {
   return e instanceof CritiqueDiscardedError;
 }
 
-/** Client-side preset critique: no image-specific claims, score untouched. */
+/** Client-side preset critique: no image-specific claims, score untouched, no Aura-max card. */
 export function fallbackCritique(capture: Capture, result: RateResult): CritiqueResponse {
   const text =
     result.status === "ok"
@@ -52,7 +53,9 @@ function parseResponse(value: unknown): CritiqueResponse | null {
   if (typeof v.sessionId !== "string" || v.sessionId.length === 0) return null;
   if (typeof v.text !== "string" || v.text.trim().length === 0) return null;
   if (v.source !== "model" && v.source !== "preset") return null;
-  return { sessionId: v.sessionId, text: v.text.trim(), source: v.source };
+  // Additive Aura-max card: passed through when well-formed, dropped (never fatal) otherwise.
+  const auraMax = parseAuraMax(v.auraMax);
+  return { sessionId: v.sessionId, text: v.text.trim(), source: v.source, ...(auraMax ? { auraMax } : {}) };
 }
 
 export async function requestCritique(

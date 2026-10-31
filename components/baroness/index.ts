@@ -33,3 +33,4 @@ export {
   type BaronessTimeoutConfig,
 } from "./timeouts";
 export { decideRun, type RunDecision } from "./session-gate";
+export { AuraMax, AuraMaxStage, ScareAuraMax, type AuraMaxStageData, type AuraMaxStageProps } from "./AuraMax";
