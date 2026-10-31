@@ -1,0 +1,163 @@
+/* Aura-max stage: black / ivory / red, editorial serif like the rest of the mirror. */
+.stage {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* "safe": if it ever overflows, scroll from the top instead of clipping the title */
+  justify-content: safe center;
+  gap: clamp(6px, 1.2vw, 12px);
+  padding: 3% 5%;
+  overflow: auto;
+  text-align: center;
+  color: var(--ivory);
+  background: radial-gradient(ellipse at 50% 40%, rgba(30, 6, 9, 0.92), #090909 70%);
+}
+.card {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(4px, 0.9vw, 9px);
+}
+.kicker {
+  margin: 0;
+  font-family: var(--display);
+  letter-spacing: 0.14em;
+  color: var(--blood);
+  font-size: clamp(1.5rem, 4vw, 2.4rem);
+  line-height: 1;
+  text-shadow: 0 0 14px rgba(181, 18, 32, 0.8);
+}
+.lede {
+  margin: 0;
+  font-style: italic;
+  font-size: clamp(0.9rem, 2vw, 1.15rem);
+  max-width: 72ch;
+}
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(10px, 2.4vw, 28px);
+  width: 100%;
+}
+.step {
+  flex: 0 1 210px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+/* >= 120 px on a laptop so it scans from ~1 m; white quiet zone is inside the SVG */
+.qr {
+  display: block;
+  width: clamp(120px, 15vw, 150px);
+  height: auto;
+  aspect-ratio: 1;
+  outline: 2px solid var(--blood);
+  outline-offset: 3px;
+  background: #fff;
+}
+.stepLabel {
+  margin: 4px 0 0;
+  font-weight: 700;
+  font-size: clamp(0.85rem, 1.8vw, 1.05rem);
+  line-height: 1.2;
+}
+.ord {
+  display: block;
+  font-family: var(--display);
+  font-weight: 400;
+  color: var(--blood);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.85em;
+}
+.why {
+  margin: 0;
+  font-style: italic;
+  color: var(--silver);
+  font-size: clamp(0.7rem, 1.4vw, 0.85rem);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.finishing {
+  margin: 0;
+  max-width: 80ch;
+  font-size: clamp(0.8rem, 1.6vw, 0.95rem);
+  border-top: 1px solid rgba(181, 18, 32, 0.6);
+  padding-top: 6px;
+}
+.finishing b {
+  color: var(--silver);
+  font-weight: 700;
+}
+.note {
+  margin: 0;
+  font-size: clamp(0.65rem, 1.2vw, 0.75rem);
+  color: var(--silver);
+  opacity: 0.85;
+}
+.again {
+  flex: none;
+}
+
+/* Scare Aura-max */
+.tips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.6vw, 16px);
+  text-align: left;
+  max-width: 46ch;
+  font-size: clamp(1rem, 2.4vw, 1.45rem);
+}
+.tip {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+}
+.tipNum {
+  flex: none;
+  font-family: var(--display);
+  color: var(--blood);
+  font-size: 1.4em;
+  line-height: 1;
+  min-width: 1em;
+  text-align: center;
+}
+.tipTitle {
+  font-weight: 700;
+}
+.tipDetail {
+  display: block;
+  font-size: 0.8em;
+  font-style: italic;
+  color: var(--silver);
+}
+
+/* Phone-sized mirrors: nobody scans from here, keep it legible without overflow. */
+@media (max-width: 600px) {
+  .qr {
+    width: 88px;
+  }
+  .why {
+    display: none;
+  }
+  .step {
+    flex-basis: 92px;
+  }
+}

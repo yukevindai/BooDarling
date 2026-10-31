@@ -13,6 +13,29 @@ type ThinkingConfig = { thinkingBudget: number } | { thinkingLevel: string };
 
 /** Models we know reject a thinkingConfig (learned at runtime after a 400). */
 const thinkingUnsupported = new Set<string>();
+/** Models we know reject our responseSchema (learned after a 400); they still get JSON mode. */
+const schemaUnsupported = new Set<string>();
+
+/**
+ * Structured output for the critic's single reply: `{critique, missing}`, where `missing`
+ * is restricted (enum) to the visible checklist ids. The server re-validates regardless.
+ */
+export function geminiResponseSchema(input: Pick<CriticInput, "checklist">): Record<string, unknown> {
+  const ids = (input.checklist ?? []).map((c) => c.id);
+  return {
+    type: "OBJECT",
+    properties: {
+      critique: { type: "STRING", description: "Exactly two spoken sentences: one witty observation, one styling suggestion." },
+      missing: {
+        type: "ARRAY",
+        description: "Checklist ids clearly absent from image 1, most impactful first (max 3). Empty if none or unsure.",
+        items: ids.length ? { type: "STRING", format: "enum", enum: ids } : { type: "STRING" },
+      },
+    },
+    required: ["critique", "missing"],
+    propertyOrdering: ["critique", "missing"],
+  };
+}
 
 function normaliseModel(model: string): string {
   return model.replace(/^models\//, "");
@@ -35,7 +58,12 @@ export function geminiThinkingConfig(model: string): ThinkingConfig | undefined 
   return undefined;
 }
 
-export function buildGeminiRequest(input: CriticInput, model: string, withThinking = true): Record<string, unknown> {
+export function buildGeminiRequest(
+  input: CriticInput,
+  model: string,
+  withThinking = true,
+  withSchema = !schemaUnsupported.has(normaliseModel(model).toLowerCase()),
+): Record<string, unknown> {
   const thinkingConfig = withThinking ? geminiThinkingConfig(model) : undefined;
   const noThoughts = thinkingConfig !== undefined && "thinkingBudget" in thinkingConfig && thinkingConfig.thinkingBudget === 0;
   return {
@@ -57,6 +85,9 @@ export function buildGeminiRequest(input: CriticInput, model: string, withThinki
       candidateCount: 1,
       // Leave room for thoughts when thinking cannot be switched off.
       maxOutputTokens: noThoughts ? 256 : 1024,
+      // One call returns both the critique and the Aura-max "missing" ids (no extra latency).
+      responseMimeType: "application/json",
+      ...(withSchema ? { responseSchema: geminiResponseSchema(input) } : {}),
       ...(thinkingConfig ? { thinkingConfig } : {}),
     },
   };
@@ -142,9 +173,28 @@ export class GeminiCriticProvider implements CriticProvider {
         },
         "Gemini",
       );
+    // A 400 that blames the schema: drop responseSchema for this model (JSON mode stays) and resend.
+    const sendSchemaSafe = async (withThinking: boolean): Promise<unknown> => {
+      try {
+        return await send(withThinking);
+      } catch (err) {
+        const m = model.toLowerCase();
+        if (
+          !isAbortError(err) &&
+          err instanceof CriticProviderError &&
+          err.status === 400 &&
+          /schema|enum|property_?ordering|propertyOrdering/i.test(err.message) &&
+          !schemaUnsupported.has(m)
+        ) {
+          schemaUnsupported.add(m);
+          return send(withThinking);
+        }
+        throw err;
+      }
+    };
     let json: unknown;
     try {
-      json = await send(true);
+      json = await sendSchemaSafe(true);
     } catch (err) {
       // A 400 that mentions thinking means this model rejects our thinkingConfig: retry once without it.
       if (
@@ -155,7 +205,7 @@ export class GeminiCriticProvider implements CriticProvider {
         geminiThinkingConfig(model)
       ) {
         thinkingUnsupported.add(model.toLowerCase());
-        json = await send(false);
+        json = await sendSchemaSafe(false);
       } else {
         throw err;
       }

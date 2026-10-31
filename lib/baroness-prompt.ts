@@ -9,7 +9,7 @@ import type { CriticInput } from "./critic/types";
 import { scoreBand, type ScoreBand } from "./critic/lines";
 
 /** Bump whenever prompt wording changes (part of the critique cache key). */
-export const PROMPT_VERSION = "baroness-v2";
+export const PROMPT_VERSION = "baroness-v3-auramax";
 
 /** Soft target for the whole critique (keeps TTS short). */
 export const CRITIQUE_TARGET_CHARS = 260;
@@ -22,7 +22,7 @@ export const BARONESS_SYSTEM_PROMPT = [
   "You receive two images. Image 1 is the visitor's outfit (a crop from a mirror camera). Image 2 is the reference look they are being compared against.",
   "You are also given the Aura score (0-100) that a separate image-similarity system already computed, plus the name of the matched look.",
   "",
-  "Write EXACTLY two sentences:",
+  "Your critique is EXACTLY two sentences:",
   "1. One witty observation about the visitor's outfit compared with the reference.",
   "2. One useful, specific, actionable styling suggestion that would bring the outfit closer to the reference.",
   "",
@@ -32,7 +32,14 @@ export const BARONESS_SYSTEM_PROMPT = [
   "- Judge clothing only. Never comment on bodies, body shape, weight, height, faces, facial features, skin, age, gender, race, ethnicity, disability, identity or attractiveness.",
   "- The score is final and not yours. Do not state, repeat, change, dispute or second-guess any number, and never claim to know why the similarity system produced its score.",
   "- Match your tone to the score band you are given: cutting but playful when low, sharp and coaching in the middle, grudging respect when high. Theatrical, never cruel, never crude, no insults about the person.",
-  `- Plain spoken text only: no markdown, lists, labels, emoji, quotation marks, hashtags or stage directions. Keep the whole reply under ${CRITIQUE_TARGET_CHARS} characters; it will be read aloud.`,
+  `- The critique is plain spoken text only: no markdown, lists, labels, emoji, quotation marks, hashtags or stage directions. Keep the critique under ${CRITIQUE_TARGET_CHARS} characters; it will be read aloud.`,
+  "",
+  "Output format: reply with ONE JSON object and nothing else, no code fences:",
+  '{"critique": "<your two sentences>", "missing": ["<checklist id>", ...]}',
+  "- \"critique\": the two sentences described above.",
+  "- \"missing\": ids from the costume checklist you are given, and only those, for pieces that are CLEARLY ABSENT from image 1. Order them by how much adding each would bring the outfit closer to the reference, most impactful first; at most 3.",
+  "- Leave a piece out of \"missing\" if it is present, partly present, cropped out of frame, hidden, unclear, or you are unsure. Never guess. If nothing is clearly missing, or no checklist is given, use an empty list [].",
+  "- \"missing\" never changes or explains the score.",
 ].join("\n");
 
 const BAND_TONE: Record<ScoreBand, string> = {
@@ -64,11 +71,23 @@ export function buildBaronessUserPrompt(input: CriticInput): string {
       "You may weave in one remark about how this overall silhouette/line compares with the reference — but speak of the garment's shape and line only, never the body.",
     );
   }
+  const checklist = (input.checklist ?? [])
+    .map((c) => ({ id: clean(c.id, 48), label: clean(c.label, 80) }))
+    .filter((c) => /^[a-z0-9][a-z0-9-]*$/.test(c.id) && c.label)
+    .slice(0, 12);
+  if (checklist.length) {
+    lines.push(
+      "Costume checklist for this look (pieces the camera crop can show; use these ids for \"missing\"):",
+      ...checklist.map((c) => `- ${c.id}: ${c.label}`),
+    );
+  } else {
+    lines.push('No costume checklist for this look: "missing" must be [].');
+  }
   lines.push(
     `Computed Aura score: ${aura} out of 100 (already final — do not mention or change it).`,
     `Score band: ${BAND_TONE[scoreBand(aura)]}`,
     "Compare only the visible clothing and styling in image 1 against image 2.",
-    "Reply with exactly two sentences: one witty observation, then one actionable styling suggestion. No numbers, no quotes, no labels.",
+    'Reply with the JSON object only: {"critique": "...", "missing": [...]}. The critique is exactly two sentences: one witty observation, then one actionable styling suggestion. No numbers, no quotes, no labels inside the critique.',
   );
   return lines.join("\n");
 }

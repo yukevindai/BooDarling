@@ -1,6 +1,8 @@
 /**
  * Deterministic, image-free critic for local development and demo rehearsal
  * (`CRITIC_PROVIDER=mock`). Text varies by score band and look label only.
+ * Replies in the same JSON shape as the real critics: `{critique, missing}`, where
+ * `missing` is the first N visible checklist ids for the score band (deterministic).
  */
 import { scoreBand, type ScoreBand } from "../lines";
 import type { BaronessReadiness, CriticInput, CriticProvider } from "../types";
@@ -43,6 +45,18 @@ export function mockCritique(input: Pick<CriticInput, "aura" | "lookId" | "lookL
   return options[hash(`${input.lookId}|${Math.round(input.aura)}`) % options.length](look);
 }
 
+/** How many visible checklist pieces the mock reports missing per band. */
+const MOCK_MISSING: Record<ScoreBand, number> = { dismal: 3, weak: 2, promising: 2, strong: 1, iconic: 0 };
+
+export function mockMissing(input: Pick<CriticInput, "aura" | "checklist">): string[] {
+  return (input.checklist ?? []).slice(0, MOCK_MISSING[scoreBand(input.aura)]).map((c) => c.id);
+}
+
+/** The mock's full reply (JSON string, like Gemini/Ollama in JSON mode). */
+export function mockReply(input: Pick<CriticInput, "aura" | "lookId" | "lookLabel" | "checklist">): string {
+  return JSON.stringify({ critique: mockCritique(input), missing: mockMissing(input) });
+}
+
 export class MockCriticProvider implements CriticProvider {
   readonly id = "mock";
   readonly model = "mock-v1";
@@ -65,7 +79,7 @@ export class MockCriticProvider implements CriticProvider {
       });
     }
     signal.throwIfAborted();
-    return mockCritique(input);
+    return mockReply(input);
   }
 
   async readiness(): Promise<BaronessReadiness> {

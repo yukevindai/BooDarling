@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { LruCache, critiqueCacheKey } from "./cache";
+import { LruCache, critiqueCacheKey, type CachedCritique } from "./cache";
 import { createCritique, validateCritiqueRequest, type CreateCritiqueOptions } from "./critique";
 import { ANNOUNCEMENT_LINES, PRESET_CRITIQUES, pickPresetCritique } from "./lines";
 import { CriticProviderError } from "./providers/errors";
@@ -181,7 +181,7 @@ describe("createCritique", () => {
   });
 
   it("serves exact repeats from the cache (model results only)", async () => {
-    const cache = new LruCache<string>(10, 60_000);
+    const cache = new LruCache<CachedCritique>(10, 60_000);
     const p = new FakeProvider(async () => MODEL_TEXT);
     const a = ok(await createCritique(body(), opts(p, { cache })));
     const b = ok(await createCritique(body(), opts(p, { cache })));
@@ -201,7 +201,7 @@ describe("createCritique", () => {
   });
 
   it("does not serve a stale cached critique after the reference image or look metadata changes", async () => {
-    const cache = new LruCache<string>(10, 60_000);
+    const cache = new LruCache<CachedCritique>(10, 60_000);
     const p = new FakeProvider(async () => MODEL_TEXT);
     let image = REF_IMAGE;
     let label = "Classic Dalmatian Coat";

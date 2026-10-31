@@ -1,17 +1,22 @@
 /**
  * Critique orchestrator for `POST /api/critique` (server-side only).
  *
- * Contract (spec §5, §8): `{ capture, result }` → `{ sessionId, text, source }`.
+ * Contract (spec §5, §8): `{ capture, result }` → `{ sessionId, text, source, auraMax? }`.
  *  - The score is never computed, changed or echoed here.
  *  - The reference image is resolved server-side from the manifest.
  *  - Any critic failure, timeout, unknown reference or unsafe text → a preset
  *    line with no image-specific claims (`source: "preset"`), still HTTP 200.
  *  - One automatic retry for transient errors while the request is alive and
  *    enough of the time budget remains.
+ *  - Halloween Aura-max (additive): the SAME model call returns the checklist ids it saw
+ *    missing; `auraMax` is resolved from the manifest checklist. When that opinion is
+ *    unknown (preset/timeout/plain-text reply) the card falls back to the look's top
+ *    visible pieces (`source: "fallback"`). Unavailable results get no auraMax.
  */
 import type { Capture, RateResult } from "@/lib/types";
 import { PROMPT_VERSION } from "../baroness-prompt";
-import { critiqueCache, critiqueCacheKey, type LruCache } from "./cache";
+import { parseCritiqueOutput, resolveAuraMax, visibleChecklist } from "./aura-max";
+import { critiqueCache, critiqueCacheKey, type CachedCritique, type LruCache } from "./cache";
 import { criticTimeoutMs, projectRoot } from "./config";
 import { loadReferenceImage as defaultLoadReferenceImage, parseImageDataUrl } from "./images";
 import { ANNOUNCEMENT_LINES, pickPresetCritique } from "./lines";
@@ -42,7 +47,7 @@ export type CreateCritiqueOptions = {
   retryMinBudgetMs?: number;
   now?: () => number;
   /** `null` disables caching; defaults to the process-wide cache. */
-  cache?: LruCache<string> | null;
+  cache?: LruCache<CachedCritique> | null;
   resolveReference?: (referenceId: string, lookId?: string) => Promise<ResolvedReference | null>;
   loadReferenceImage?: (absPath: string, root: string) => Promise<CriticImage>;
   /** Log sink (one line per request); defaults to console.info. */
@@ -183,19 +188,25 @@ export async function createCritique(body: unknown, opts: CreateCritiqueOptions 
   const deadline = started + budgetMs;
   let attempts = 0;
 
-  const finish = (text: string, source: "model" | "preset", reason?: string): CritiqueOutcome => {
+  /** Resolved reference (set once known); its look checklist drives auraMax. */
+  let ref: ResolvedReference | null = null;
+
+  /** `missing`: checklist ids the critic saw missing; null = unknown (fallback card). */
+  const finish = (text: string, source: "model" | "preset", reason?: string, missing: string[] | null = null): CritiqueOutcome => {
+    const auraMax = ref ? resolveAuraMax(ref, missing) : undefined;
     log(
       `[critique] session=${req.sessionId.slice(0, 12)} provider=${provider.id} model=${provider.model} ` +
-        `source=${source}${reason ? ` reason=${reason}` : ""} attempts=${attempts} ms=${now() - started}`,
+        `source=${source}${reason ? ` reason=${reason}` : ""} attempts=${attempts} ms=${now() - started}` +
+        (auraMax ? ` auramax=${auraMax.source}:${auraMax.steps.length}` : ""),
     );
-    return { status: 200, body: { sessionId: req.sessionId, text, source } };
+    return { status: 200, body: { sessionId: req.sessionId, text, source, ...(auraMax ? { auraMax } : {}) } };
   };
   const preset = (reason: string) => finish(pickPresetCritique(req.aura, req.sessionId).text, "preset", reason);
 
   if (requestSignal.aborted) return preset("client-aborted");
 
   // Reference image is resolved server-side only.
-  const ref = await (opts.resolveReference ?? defaultResolveReference)(req.referenceId, req.lookId);
+  ref = await (opts.resolveReference ?? defaultResolveReference)(req.referenceId, req.lookId);
   if (!ref) return preset("unknown-reference");
   let referenceImage: CriticImage;
   try {
@@ -221,8 +232,9 @@ export async function createCritique(body: unknown, opts: CreateCritiqueOptions 
     silhouette: req.silhouette ?? "",
   });
   const cached = cache?.get(cacheKey);
-  if (cached) return finish(cached, "model", "cache-hit");
+  if (cached) return finish(cached.text, "model", "cache-hit", cached.missing);
 
+  const visible = visibleChecklist(ref.checklist ?? []).map((c) => ({ id: c.id, label: c.label }));
   const input: CriticInput = {
     userImage: req.userImage,
     referenceImage,
@@ -231,6 +243,7 @@ export async function createCritique(body: unknown, opts: CreateCritiqueOptions 
     lookLabel: ref.lookLabel,
     lookDescription: ref.lookDescription,
     silhouette: req.silhouette,
+    ...(visible.length ? { checklist: visible } : {}),
   };
 
   while (attempts < 2) {
@@ -248,10 +261,12 @@ export async function createCritique(body: unknown, opts: CreateCritiqueOptions 
     const signal = AbortSignal.any([requestSignal, timeout.signal]);
     try {
       const raw = await raceAbort(provider.critique(input, signal), signal);
-      const clean = sanitizeCritiqueDetailed(raw, { aura: req.aura });
+      // One reply carries both: the spoken critique (sanitised exactly as before) and `missing`.
+      const parsed = parseCritiqueOutput(raw, visible);
+      const clean = sanitizeCritiqueDetailed(parsed.critique, { aura: req.aura });
       if (clean.text === null) return preset(`sanitize:${clean.reason}`);
-      cache?.set(cacheKey, clean.text);
-      return finish(clean.text, "model");
+      cache?.set(cacheKey, { text: clean.text, missing: parsed.missing });
+      return finish(clean.text, "model", parsed.missing === null ? "missing-unknown" : undefined, parsed.missing);
     } catch (err) {
       if (requestSignal.aborted) return preset("client-aborted");
       const left = deadline - now();

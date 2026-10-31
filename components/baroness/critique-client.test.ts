@@ -140,6 +140,35 @@ describe("requestCritique", () => {
     assert.equal(called, false);
   });
 
+  it("passes a well-formed auraMax through, tolerates its absence, drops a malformed one", async () => {
+    const auraMax = {
+      lookId: "red-glamour",
+      lookLabel: "Red Glamour",
+      steps: [{ id: "opera-gloves", label: "Crimson opera gloves", why: "Drama.", search: "red satin opera gloves" }],
+      finishing: [{ id: "red-lipstick", label: "Bold red lipstick", why: "Lips.", search: "red lipstick" }],
+      complete: false,
+      source: "model",
+    };
+    globalThis.fetch = (async () => json({ sessionId: "s-1", text: "One. Two.", source: "model", auraMax })) as typeof fetch;
+    assert.deepEqual(await requestCritique(capture, ok), { sessionId: "s-1", text: "One. Two.", source: "model", auraMax });
+
+    globalThis.fetch = (async () => json({ sessionId: "s-1", text: "One. Two.", source: "preset" })) as typeof fetch;
+    const without = await requestCritique(capture, ok);
+    assert.deepEqual(without, { sessionId: "s-1", text: "One. Two.", source: "preset" });
+    assert.equal("auraMax" in without, false);
+
+    globalThis.fetch = (async () =>
+      json({ sessionId: "s-1", text: "One. Two.", source: "model", auraMax: { ...auraMax, source: "vibes" } })) as typeof fetch;
+    const malformed = await requestCritique(capture, ok);
+    assert.equal(malformed.source, "model", "a bad auraMax never discards the critique");
+    assert.equal("auraMax" in malformed, false);
+  });
+
+  it("client-side fallback carries no auraMax", async () => {
+    globalThis.fetch = (async () => json({ error: "boom" }, 500)) as typeof fetch;
+    assert.equal("auraMax" in (await requestCritique(capture, ok)), false);
+  });
+
   it("discards a successful response if the caller aborted meanwhile", async () => {
     const ac = new AbortController();
     globalThis.fetch = (async () => {

@@ -10,13 +10,14 @@ import { getPoseDetector } from "@/lib/capture/detector";
 import type { FramingState } from "@/lib/capture/types";
 import { ReflectCamera } from "@/components/reflect/ReflectCamera";
 import CaptureStub from "@/components/reflect/CaptureStub";
-import { isCritiqueDiscarded, requestCritique } from "@/components/baroness";
+import { AuraMaxStage, isCritiqueDiscarded, requestCritique, type AuraMaxStageData } from "@/components/baroness";
+import { AURAMAX_STEP_MS, afterBoard, keepsSessionOnDeparture, type ResultsStep } from "@/lib/results-flow";
 import BooCamp from "@/components/boocamp/BooCamp";
 import NameEntry from "@/components/leaderboard/NameEntry";
 import { LeaderboardBoard, LeaderboardRibbon } from "@/components/leaderboard/Leaderboard";
 import { getFaceDetector } from "@/lib/expressions/faceDetector";
 import { addEntry, clearEntries } from "@/lib/leaderboard/store";
-import { scareVerdict } from "@/lib/expressions/scare";
+import { scareVerdict, type ScareTip } from "@/lib/expressions/scare";
 import SilhouetteOverlay from "@/components/silhouette/SilhouetteOverlay";
 import FaceDetectionOverlay from "@/components/reflect/FaceDetectionOverlay";
 
@@ -38,8 +39,8 @@ const SCARE_TIMEOUT_MS = 60000;
 const BOARD_RESET_MS = 15000;
 
 type PoseStatus = "idle" | "loading" | "ready" | "error";
-// Results sub-steps. Costume: outfit verdict -> name -> leaderboard. Scare: (BooCamp in phase "scaring") -> name -> leaderboard.
-type Step = "verdict" | "name" | "board";
+// Results sub-steps. Costume: outfit verdict -> name -> leaderboard -> Aura-max. Scare: (BooCamp) -> name -> leaderboard -> Aura-max.
+type Step = ResultsStep;
 type Guide = { message: string | null; progress: number };
 
 function useTypewriter(text: string | undefined, ms = 32) {
@@ -78,6 +79,7 @@ export default function Mirror() {
   const music = useRef<HTMLAudioElement | null>(null);
   const [muted, setMuted] = useState(false);
   const [step, setStep] = useState<Step>("verdict");
+  const [boost, setBoost] = useState<AuraMaxStageData | null>(null); // Aura-max stage content, if any
   const stepRef = useRef<Step>("verdict"); stepRef.current = step;
   const [entryId, setEntryId] = useState<string | undefined>();
   const [scareReady, setScareReady] = useState(false);
@@ -119,7 +121,7 @@ export default function Mirror() {
     const rec = recRef.current; recRef.current = null; rec?.stop(); setListening(false);
     ctrl.current?.abort(); ctrl.current = new AbortController();
     setGuide({ message: null, progress: 0 });
-    setStep("verdict"); setEntryId(undefined); setScareReady(false);
+    setStep("verdict"); setEntryId(undefined); setScareReady(false); setBoost(null);
     const id = crypto.randomUUID();
     silhouette.current = null;
     dispatch({ type: "reveal", sessionId: id, mode });
@@ -129,7 +131,7 @@ export default function Mirror() {
   const reset = useCallback(() => {
     phase.current = "waiting";
     ctrl.current?.abort(); stopAudio(); setHeard(""); setGuide({ message: null, progress: 0 });
-    setStep("verdict"); setEntryId(undefined); setScareReady(false);
+    setStep("verdict"); setEntryId(undefined); setScareReady(false); setBoost(null);
     dispatch({ type: "reset" });
   }, []);
 
@@ -213,19 +215,20 @@ export default function Mirror() {
       dispatch({ type: "rated", result });
       if (result.status !== "ok") return;
       // Bounded wait; on timeout/failure R4's client falls back to the preset line for this score band.
-      let text: string;
-      try { text = (await requestCritique(captureWithSilhouette, result, { signal })).text; }
+      let text: string, auraMax;
+      try { ({ text, auraMax } = await requestCritique(captureWithSilhouette, result, { signal })); }
       catch (e) { if (isCritiqueDiscarded(e)) return; throw e; } // visitor left / stale: show nothing
       if (sid.current !== id) return;
       dispatch({ type: "critique", text }); speak(text, id);
+      if (auraMax) setBoost({ kind: "costume", auraMax });
     } catch { /* aborted on departure */ }
   }, [speak]);
 
   // R2 presence (debounced): departure ends a session (spec §2). Arrival does not start one.
   const onPresenceChange = useCallback((p: boolean) => {
     present.current = p;
-    // Typing a name / reading the board may take visitors out of frame: those steps time out on their own.
-    if (presenceAction(phase.current, p) === "reset" && stepRef.current !== "name" && stepRef.current !== "board") reset();
+    // Typing a name / reading the board / scanning an Aura-max QR may take visitors out of frame: those steps time out on their own.
+    if (presenceAction(phase.current, p) === "reset" && !keepsSessionOnDeparture(stepRef.current)) reset();
   }, [reset]);
 
   const onFramingChange = useCallback((f: FramingState) => {
@@ -242,10 +245,10 @@ export default function Mirror() {
   // The timer restarts at each phase-two step so BooCamp + name entry aren't cut short.
   useEffect(() => {
     if (s.phase !== "results") return;
-    const ms = step === "board" ? BOARD_RESET_MS : fallback ? RESULTS_TIMEOUT_FALLBACK_MS : RESULTS_TIMEOUT_MS;
-    const t = setTimeout(reset, ms);
+    const ms = step === "auramax" ? AURAMAX_STEP_MS : step === "board" ? BOARD_RESET_MS : fallback ? RESULTS_TIMEOUT_FALLBACK_MS : RESULTS_TIMEOUT_MS;
+    const t = setTimeout(step === "board" && afterBoard(!!boost) === "auramax" ? () => setStep("auramax") : reset, ms);
     return () => clearTimeout(t);
-  }, [s.phase, step, reset, fallback]);
+  }, [s.phase, step, reset, fallback, boost]);
 
   // Costume: once the critique has been said, move on to the guest book.
   const rated = s.phase === "results" && s.result?.status === "ok";
@@ -264,8 +267,9 @@ export default function Mirror() {
     return () => { clearTimeout(intro); clearTimeout(net); };
   }, [s.phase, s.sessionId, reset]);
 
-  const onScareDone = useCallback((score: number | null) => {
+  const onScareDone = useCallback((score: number | null, tips?: ScareTip[]) => {
     dispatch({ type: "scared", sessionId: sid.current, score });
+    if (score !== null && tips?.length) setBoost({ kind: "scare", score, tips });
     if (score !== null) setStep("name");
   }, []);
 
@@ -399,7 +403,8 @@ export default function Mirror() {
                   verdict={s.mode === "scare" ? scareVerdict(myScore) : verdictWord(myScore)} />
               )}
               {step === "board" && <div className="over"><LeaderboardBoard mode={s.mode} highlightId={entryId} /></div>}
-              {step === "board" && <button className="btn boardAgain" onClick={reset}>FACE THE MIRROR AGAIN</button>}
+              {step === "board" && !boost && <button className="btn boardAgain" onClick={reset}>FACE THE MIRROR AGAIN</button>}
+              {step === "auramax" && boost && <AuraMaxStage stage={boost} onAgain={reset} />}
             </>
           )}
 

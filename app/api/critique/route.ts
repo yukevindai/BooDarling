@@ -1,5 +1,5 @@
 /**
- * POST /api/critique  { capture, result } -> { sessionId, text, source }
+ * POST /api/critique  { capture, result } -> { sessionId, text, source, auraMax? }
  * GET  /api/critique  -> BaronessReadiness JSON (critic provider + reference manifest; no secrets)
  *
  * The score is never changed here. Critic failures degrade to preset lines (200).

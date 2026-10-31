@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, type RefObject } from "react";
 import { useBooCamp } from "@/lib/expressions/useBooCamp";
-import { scareVerdict } from "@/lib/expressions/scare";
+import { scareVerdict, type ScareTip } from "@/lib/expressions/scare";
 import s from "./BooCamp.module.css";
 
 type Props = {
@@ -15,8 +15,8 @@ type Props = {
   runId: string;
   /** Speak a line in the Baroness's voice (optional). */
   onSay?: (text: string) => void;
-  /** Called once with the Scare Score, or null if skipped. */
-  onDone: (score: number | null) => void;
+  /** Called once with the Scare Score, or null if skipped (plus Scare Aura-max tips when scored). */
+  onDone: (score: number | null, tips?: ScareTip[]) => void;
   /** Line shown/spoken when the face can't be read (defaults to LINES.skipped). */
   skipLine?: string;
 };
@@ -50,9 +50,9 @@ export default function BooCamp({ videoRef, runId, onSay, onDone, skipLine = LIN
   // Hand back after the reveal.
   useEffect(() => {
     if (st.phase !== "done" && st.phase !== "skipped") return;
-    const t = setTimeout(() => doneRef.current(st.score), st.phase === "done" ? REVEAL_MS : 2000);
+    const t = setTimeout(() => doneRef.current(st.score, st.tips), st.phase === "done" ? REVEAL_MS : 2000);
     return () => clearTimeout(t);
-  }, [st.phase, st.score]);
+  }, [st.phase, st.score, st.tips]);
 
   return (
     <div className={s.wrap} aria-live="polite">
