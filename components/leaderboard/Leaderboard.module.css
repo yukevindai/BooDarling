@@ -1,0 +1,176 @@
+/* ---------- top ribbon ---------- */
+.ribbon {
+  width: min(94vw, 860px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 16px;
+  margin-top: 8px;
+  border: 1px solid rgba(217, 169, 79, 0.6);
+  border-radius: 999px;
+  background: rgba(9, 9, 9, 0.6);
+  font-size: 0.85rem;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ribbonTitle {
+  font-family: var(--display);
+  color: var(--gold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  flex: none;
+}
+.ribbonList {
+  display: flex;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pts {
+  color: var(--blood);
+  font-weight: 700;
+  margin-left: 2px;
+}
+.empty {
+  font-style: italic;
+  color: var(--silver);
+}
+@media (max-width: 600px) {
+  .ribbon {
+    flex-wrap: wrap;
+    white-space: normal;
+    border-radius: 14px;
+  }
+  .ribbonList {
+    flex-wrap: wrap;
+    gap: 4px 14px;
+  }
+}
+
+/* ---------- full board (inside the mirror) ---------- */
+.board {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4% 6%;
+  background: rgba(9, 9, 9, 0.88);
+}
+.boardTitle {
+  margin: 0 0 10px;
+  font-family: var(--display);
+  font-size: clamp(1.4rem, 4vw, 2.4rem);
+}
+.table {
+  width: min(100%, 560px);
+  border-collapse: collapse;
+  font-size: clamp(0.8rem, 2vw, 1rem);
+}
+.table th {
+  font-family: var(--display);
+  color: var(--gold);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(217, 169, 79, 0.5);
+}
+.table td {
+  text-align: center;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(191, 192, 192, 0.15);
+}
+.table .name {
+  text-align: left;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.total {
+  color: var(--blood);
+  font-weight: 700;
+}
+.mine td {
+  background: rgba(181, 18, 32, 0.35);
+  color: var(--ivory);
+}
+.mine .total {
+  color: var(--ivory);
+}
+.gap td {
+  color: var(--silver);
+  border: none;
+  padding: 0;
+}
+.you {
+  margin: 10px 0 0;
+  font-style: italic;
+}
+
+/* ---------- name entry ---------- */
+.entry {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 6%;
+  text-align: center;
+  background: rgba(9, 9, 9, 0.82);
+}
+.entryTitle {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+}
+.entryScores {
+  margin: 0;
+  color: var(--silver);
+}
+.entryScores b {
+  color: var(--ivory);
+}
+.input {
+  width: min(80%, 360px);
+  padding: 0.5em 0.9em;
+  font: inherit;
+  font-size: 1.1rem;
+  text-align: center;
+  color: var(--ivory);
+  background: rgba(244, 240, 232, 0.08);
+  border: 1px solid var(--silver);
+  border-radius: 999px;
+}
+.input:focus {
+  outline: 2px solid var(--blood);
+  outline-offset: 2px;
+}
+.entryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+}
+.skip {
+  background: none;
+  border: none;
+  color: var(--silver);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.timer {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--silver);
+}
