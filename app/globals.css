@@ -41,7 +41,7 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
 /* MIRROR GLASS */
 .glass{position:relative;width:100%;height:100%;overflow:hidden;border-radius:6px;background:#000;box-shadow:inset 0 0 60px #000,inset 0 0 0 2px rgba(191,192,192,.5)}
 .glass video,.glass .shot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.glass video{transform:scaleX(-1)}
+.glass video,.glass .shot{transform:scaleX(-1)} /* captures are raw (unmirrored) frames; show them as the visitor saw them */
 .glass.creepy video,.glass.creepy .shot{filter:contrast(1.1) saturate(.75)}
 .fog{position:absolute;inset:0;z-index:3;pointer-events:none;transition:opacity 1.8s ease,backdrop-filter 1.8s ease;
   background:radial-gradient(ellipse at 50% 50%,rgba(244,240,232,.9),rgba(244,240,232,.25) 55%,rgba(9,9,9,.7) 100%)}
@@ -64,6 +64,14 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
 .count{font-family:var(--display);font-size:clamp(6rem,20vw,12rem);position:absolute;z-index:7;inset:0;display:grid;place-items:center;color:var(--ivory)}
 .count::before,.count::after{display:grid;place-items:center}
 .line{position:absolute;z-index:6;left:0;right:0;bottom:6%;text-align:center;font-style:italic;font-size:clamp(1.1rem,2.6vw,1.6rem);text-shadow:0 2px 12px #000}
+/* live caption (Baroness line / R2 framing guidance): plate keeps it legible over a bright room */
+.line.guide{left:50%;right:auto;transform:translateX(-50%);width:max-content;max-width:90%;padding:.25em 1.1em;
+  background:rgba(9,9,9,.62);border-bottom:2px solid var(--blood);text-shadow:none}
+/* R2 hold-still progress, under the caption */
+.progress{position:absolute;z-index:6;left:20%;right:20%;bottom:3%;height:3px;background:rgba(244,240,232,.25)}
+.progress span{display:block;height:100%;background:var(--blood);box-shadow:0 0 8px var(--blood);transition:width 80ms linear}
+/* operator-only status (degraded mode) */
+.opnote{position:absolute;z-index:6;left:3%;bottom:2%;margin:0;font-size:.7rem;color:var(--silver);opacity:.8}
 
 /* red scan */
 .scan{position:absolute;left:0;right:0;height:14%;z-index:4;background:linear-gradient(transparent,rgba(181,18,32,.85),transparent);

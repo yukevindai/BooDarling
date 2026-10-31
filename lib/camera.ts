@@ -8,14 +8,15 @@ export function useCamera() {
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
-  const start = useCallback(async () => {
+  /** Resolves true once the stream is attached; false (with `error` set) if the camera was refused. */
+  const start = useCallback(async (): Promise<boolean> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
       streamRef.current = stream;
       if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}); }
-      setReady(true); setError(null);
-    } catch { setError("Camera blocked. Allow camera access in the browser and reload."); }
+      setReady(true); setError(null); return true;
+    } catch { setError("Camera blocked. Allow camera access in the browser and reload."); return false; }
   }, []);
 
   const stop = useCallback(() => {

@@ -7,6 +7,9 @@ export default {
     // so file tracing can't discover them) — include them explicitly.
     outputFileTracingIncludes: {
       "/api/critique": ["./references/**/*", "./public/references/**/*"],
+      // /api/reference/[referenceId] reads the manifest and checks the image exists before redirecting.
+      // ("[...]" would be a glob character class, so match the route by prefix.)
+      "/api/reference/**": ["./references/**/*", "./public/references/**/*"],
     },
   },
 };
