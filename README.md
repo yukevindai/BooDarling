@@ -1,9 +1,6 @@
 <img width="1446" height="420" alt="Screenshot 2026-10-31 at 15 19 50" src="https://github.com/user-attachments/assets/36c70530-03aa-40df-a21e-67a285d7e1c2" />
 
-# Boo, Darling! — Reflect / Cruella MVP
-
-Hands-free costume mirror. Spec: `docs/Reflect_Cruella_MVP_Spec.md`.
-
+# Boo, Darling!
 ## Run
 ```powershell
 npm install
