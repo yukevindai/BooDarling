@@ -12,8 +12,14 @@ export type SanitizeResult =
 
 /**
  * Body / identity terms the Baroness must never use (spec §5: clothing only).
- * Some common styling compounds are allowed through with negative lookaheads
- * (e.g. "thin belt", "skinny jeans", "skin-tight", "old-fashioned").
+ * Rules are word-boundary / phrase aware so costume vocabulary passes:
+ *  - styling compounds: "thin belt", "skinny jeans", "skin-tight", "old-fashioned",
+ *    "man-tailored", "man-made", "body-con";
+ *  - makeup is costume: "smoky eyes", "eyeliner", "face paint";
+ *  - idioms: "face it", "face the music", "about-face";
+ *  - persona words: "lady", "young" ("the night is young").
+ * Genuine body / identity references (weight, fat, skinny-as-body, ugly, race,
+ * skin colour, age, gender, "your face", ...) still force a preset.
  */
 const BLOCKED_TERMS: RegExp[] = [
   /\b(?:fat|fatter|fattest|chubby|plump|obese|overweight|underweight|curvy|scrawny|bony|stocky|portly)\b/i,
@@ -21,12 +27,15 @@ const BLOCKED_TERMS: RegExp[] = [
   /\bskinny\b(?!\s+(?:jeans|trousers|pants|ties?|belts?|scarf|lapels?))/i,
   /\b(?:weight|weigh|weighs|belly|tummy|thighs?|buttocks?|bum|butt|breasts?|bust|cleavage|muscles?|muscular|physique)\b/i,
   /\bbod(?:y|ies)\b(?!-?(?:con|suit))/i,
-  /\b(?:face|faces|facial|nose|teeth|jaw|cheeks?|wrinkles?|wrinkled|freckles?|acne|complexion|eyes)\b/i,
+  // "face"/"faces", except idioms and face paint/makeup; "about-face"/"typeface" are not words here.
+  /(?<![-\w])faces?\b(?!\s*-?\s*(?:it|facts|paint|painting|off|mask)\b)(?!\s+the\s+(?:music|facts|truth|mirror)\b)/i,
+  /\b(?:facial|nose|teeth|jaw|cheeks?|wrinkles?|wrinkled|freckles?|acne|complexion)\b/i,
   /\bskin(?:ned|s)?\b(?!-?tight)/i,
   /\b(?:ugly|unattractive|attractive|sexy|homely|plain-looking)\b/i,
-  /\b(?:age|aged|ageing|aging|elderly|wrinkly|youthful|young|younger|teen|teenager|child)\b/i,
+  /\b(?:age|aged|ageing|aging|elderly|wrinkly|youthful|younger|teen|teenager|child)\b/i,
   /\bold(?:er|est)?\b(?!-(?:fashioned|school|world|money|style))(?!\s+(?:hollywood|money|world|school))/i,
-  /\b(?:race|racial|ethnic|ethnicity|gender|male|female|man|men|woman|women|boy|girl|lady|ladies|gentleman|gentlemen|sir|madam|ma'am)\b/i,
+  /\bman\b(?!-(?:tailored|made))/i,
+  /\b(?:race|racial|ethnic|ethnicity|gender|male|female|men|woman|women|boy|girl|gentleman|gentlemen|sir|madam|ma'am)\b/i,
   /\b(?:disabled|disability|wheelchair|pregnant|shorter\s+than|bald|balding|hairline)\b/i,
 ];
 

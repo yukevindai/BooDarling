@@ -5,14 +5,19 @@
  * Aborting the request (visitor left) cancels the upstream ElevenLabs request.
  */
 import { elevenLabsReadiness, toElevenLabsError } from "../../../lib/critic/elevenlabs";
-import { getSpeechAudio, validateSpeechRequest } from "../../../lib/critic/speech";
-import { SPEECH_CONTENT_TYPE } from "../../../lib/critic/speech-config";
+import {
+  getSpeechAudio,
+  safeJsonResponse,
+  speechAudioResponse,
+  validateSpeechRequest,
+  type SpeechResult,
+} from "../../../lib/critic/speech";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function json(body: unknown, status: number, extra: Record<string, string> = {}): Response {
-  return Response.json(body, { status, headers: { "Cache-Control": "no-store", ...extra } });
+  return safeJsonResponse(body, status, extra);
 }
 
 export async function GET(): Promise<Response> {
@@ -30,16 +35,9 @@ export async function POST(request: Request): Promise<Response> {
   const parsed = validateSpeechRequest(payload);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
 
+  let result: SpeechResult;
   try {
-    const result = await getSpeechAudio(parsed.text, { signal: request.signal });
-    const headers: Record<string, string> = {
-      "Content-Type": SPEECH_CONTENT_TYPE,
-      "Cache-Control": "no-store",
-      "X-Session-Id": parsed.sessionId,
-      "X-Speech-Cache": result.cache,
-    };
-    if (result.cache === "hit") headers["Content-Length"] = String(result.body.length);
-    return new Response(result.body as BodyInit, { status: 200, headers });
+    result = await getSpeechAudio(parsed.text, { signal: request.signal });
   } catch (err) {
     const e = toElevenLabsError(err, request.signal);
     if (e.code === "not_configured") {
@@ -52,5 +50,11 @@ export async function POST(request: Request): Promise<Response> {
       "X-Session-Id": parsed.sessionId,
     });
   }
+
+  // Cancels the upstream stream if the response cannot be built.
+  const response = await speechAudioResponse(result, parsed.sessionId);
+  if (response) return response;
+  console.error("[speech] could not build the audio response");
+  return json({ error: "Speech response could not be built" }, 500);
 }
 

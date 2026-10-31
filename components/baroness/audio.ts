@@ -18,6 +18,7 @@ import {
   type GuidanceKey,
 } from "@/lib/critic/lines";
 import { SPEECH_MAX_CHARS, type SpeechRequest } from "@/lib/critic/types";
+import { GUIDANCE_SPEECH_TIMEOUT_MS, speechClientTimeoutMs } from "./timeouts";
 
 /* ------------------------------------------------------------------ types */
 
@@ -37,7 +38,10 @@ export type SpeakOptions = {
   skipClip?: boolean;
   /** Cache the TTS blob for identical text. Default: true except for unscripted critiques. */
   cache?: boolean;
-  /** Per-request timeout for /api/speech. Default 8000 (5000 for guidance). */
+  /**
+   * Per-request timeout for /api/speech. Default max(15000, 2 * server SPEECH_TIMEOUT_MS + 3000)
+   * (see timeouts.ts); 5000 for guidance.
+   */
   fetchTimeoutMs?: number;
   /** Override the playback safety timeout (ms). */
   maxPlayMs?: number;
@@ -58,6 +62,11 @@ export type AudioLike = {
   onended: ((ev: any) => void) | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onerror: ((ev: any) => void) | null;
+  /** Optional (real elements have it): used to size the safety timeout from the clip duration. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onloadedmetadata?: ((ev: any) => void) | null;
+  /** Seconds; NaN/Infinity until known. */
+  readonly duration?: number;
   play(): Promise<void> | void;
   pause(): void;
   removeAttribute?(name: string): void;
@@ -87,9 +96,27 @@ export function estimateSpeechMs(text: string): number {
   return Math.max(1500, Math.round(text.trim().length * 70));
 }
 
-/** Safety timeout for playback: estimated duration + 4s, clamped to [6s, 25s]. */
+/**
+ * Pre-metadata safety timeout for playback: estimated duration + 4s, clamped to
+ * [6s, 25s]. Replaced by `metadataSafetyMs` once the real duration is known.
+ */
 export function playbackSafetyMs(text: string): number {
   return Math.min(25_000, Math.max(6_000, estimateSpeechMs(text) + 4_000));
+}
+
+export const MAX_PLAYBACK_SAFETY_MS = 60_000;
+
+/**
+ * Safety timeout from the clip's real duration (seconds): duration + 3s, capped
+ * at 60s. Returns null when the duration is unknown (NaN, Infinity, <= 0).
+ */
+export function metadataSafetyMs(durationSec: number | undefined): number | null {
+  if (typeof durationSec !== "number" || !Number.isFinite(durationSec) || durationSec <= 0) return null;
+  return Math.min(MAX_PLAYBACK_SAFETY_MS, Math.round(durationSec * 1000) + 3_000);
+}
+
+function isAbortError(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { name?: unknown }).name === "AbortError";
 }
 
 /** Clamp to the server's text cap, preferring a sentence boundary. */
@@ -192,6 +219,8 @@ type Utterance = {
   via: SpeakVia;
   objectUrl: string | null;
   timers: unknown[];
+  /** The playback safety timer (also in `timers`), replaced once metadata arrives. */
+  safetyTimer?: unknown;
   resolve: (o: SpeakOutcome) => void;
 };
 
@@ -213,6 +242,8 @@ export class BaronessVoice {
   private critiqueSession: string | null = null;
   private current: Utterance | null = null;
   private seq = 0;
+  /** Bumped whenever an utterance loads its clip onto the shared element. */
+  private elementClaims = 0;
   private throttle = new GuidanceThrottle();
   private cache = new Map<string, Blob>();
   private clipMissing = new Set<string>();
@@ -293,18 +324,33 @@ export class BaronessVoice {
       this.setState({ unlocked: true });
       return true;
     }
+    const claims = this.elementClaims;
+    const takenOver = () => this.elementClaims !== claims;
     try {
       audio.src = silentWavDataUri();
       await Promise.resolve(audio.play());
-      audio.pause();
-      this.resetElement(audio);
-      this.unlocked = true;
-      this.setState({ unlocked: true, lastError: undefined });
+      // Don't silence an utterance that grabbed the element meanwhile.
+      if (!takenOver()) {
+        audio.pause();
+        this.resetElement(audio);
+      }
+      this.markUnlocked();
       return true;
     } catch (e) {
+      // An utterance's play() interrupted ours (AbortError: "interrupted by a new
+      // load request"). The element was still activated by the gesture.
+      if (takenOver() && isAbortError(e)) {
+        this.markUnlocked();
+        return true;
+      }
       this.setState({ lastError: `unlock-failed: ${errName(e)}` });
       return false;
     }
+  }
+
+  private markUnlocked(): void {
+    this.unlocked = true;
+    this.setState({ unlocked: true, lastError: undefined });
   }
 
   private getAudio(): AudioLike | null {
@@ -321,6 +367,7 @@ export class BaronessVoice {
   private resetElement(audio: AudioLike): void {
     audio.onended = null;
     audio.onerror = null;
+    if ("onloadedmetadata" in audio) audio.onloadedmetadata = null;
     try {
       audio.pause();
     } catch {
@@ -506,7 +553,8 @@ export class BaronessVoice {
       blob = this.cache.get(key);
       if (!blob) {
         const body: SpeechRequest = { sessionId: utt.sessionId, text: ttsText };
-        const timeout = opts.fetchTimeoutMs ?? (utt.kind === "guidance" ? 5000 : 8000);
+        const timeout =
+          opts.fetchTimeoutMs ?? (utt.kind === "guidance" ? GUIDANCE_SPEECH_TIMEOUT_MS : speechClientTimeoutMs());
         const r = await this.fetchBlob(
           utt,
           "/api/speech",
@@ -550,11 +598,26 @@ export class BaronessVoice {
       this.setState({ lastError: "playback-error" });
       this.settle(utt, "playback-error");
     };
+    const armSafety = (ms: number) => {
+      if (utt.safetyTimer !== undefined) {
+        this.env.clearTimeout(utt.safetyTimer);
+        utt.timers = utt.timers.filter((t) => t !== utt.safetyTimer);
+      }
+      utt.safetyTimer = this.env.setTimeout(() => this.settle(utt, "timeout"), ms);
+      utt.timers.push(utt.safetyTimer);
+    };
+    if (opts.maxPlayMs === undefined) {
+      // The text-length estimate is only a fallback until the real duration is known.
+      audio.onloadedmetadata = () => {
+        if (utt.settled || this.current !== utt) return;
+        const ms = metadataSafetyMs(audio.duration);
+        if (ms !== null) armSafety(ms);
+      };
+    }
+    this.elementClaims++;
     audio.src = url;
     audio.volume = 1;
-    utt.timers.push(
-      this.env.setTimeout(() => this.settle(utt, "timeout"), opts.maxPlayMs ?? playbackSafetyMs(text)),
-    );
+    armSafety(opts.maxPlayMs ?? playbackSafetyMs(text));
     try {
       await Promise.resolve(audio.play());
     } catch (e) {

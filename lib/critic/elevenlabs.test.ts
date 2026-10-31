@@ -168,6 +168,22 @@ describe("elevenLabsReadiness", () => {
     assert.match(r.problems[0], /401/);
   });
 
+  it("a 401 on the voice lookup does not claim the key is rejected (may lack voices_read)", async () => {
+    stubFetch(() => new Response('{"detail":{"status":"missing_permissions"}}', { status: 401 }));
+    const r = await elevenLabsReadiness();
+    assert.equal(r.problems.length, 1);
+    assert.match(r.problems[0], /Could not verify voice \(key invalid or missing voices_read permission\)/);
+    assert.match(r.problems[0], /use Test audio to confirm/);
+    assert.doesNotMatch(r.problems[0], /rejected/);
+  });
+
+  it("reports the per-attempt server timeout so the browser can size its deadline", async () => {
+    stubFetch(() => Response.json({ name: "Baroness" }));
+    assert.equal((await elevenLabsReadiness()).detail.timeoutMs, 6000);
+    process.env.SPEECH_TIMEOUT_MS = "4500";
+    assert.equal((await elevenLabsReadiness()).detail.timeoutMs, 4500);
+  });
+
   it("does not throw on network failure", async () => {
     stubFetch(() => {
       throw new TypeError("fetch failed");

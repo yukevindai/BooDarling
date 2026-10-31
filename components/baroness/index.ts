@@ -26,3 +26,10 @@ export {
   requestCritique,
   type RequestCritiqueOptions,
 } from "./critique-client";
+export {
+  configureBaronessTimeouts,
+  critiqueClientTimeoutMs,
+  speechClientTimeoutMs,
+  type BaronessTimeoutConfig,
+} from "./timeouts";
+export { decideRun, type RunDecision } from "./session-gate";

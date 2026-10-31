@@ -8,7 +8,15 @@ import { createHash } from "node:crypto";
 export type CritiqueCacheKeyParts = {
   outfitImage: string;
   referenceId: string;
+  /**
+   * The resolved reference image content (mime + base64, as sent to the critic),
+   * so swapping the file without bumping referenceVersion cannot serve a stale critique.
+   */
+  referenceImage: string;
   lookId: string;
+  /** Manifest look label / description (they shape the prompt). */
+  lookLabel: string;
+  lookDescription: string;
   aura: number;
   modelVersion: string;
   referenceVersion: string;
@@ -24,7 +32,10 @@ export function critiqueCacheKey(p: CritiqueCacheKeyParts): string {
   for (const v of [
     p.outfitImage,
     p.referenceId,
+    p.referenceImage,
     p.lookId,
+    p.lookLabel,
+    p.lookDescription,
     String(p.aura),
     p.modelVersion,
     p.referenceVersion,

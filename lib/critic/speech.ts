@@ -4,7 +4,8 @@
  */
 import { createHash } from "node:crypto";
 import { openSpeechStream, ElevenLabsError, toElevenLabsError } from "./elevenlabs";
-import { getModelId, getOutputFormat, getVoiceId, speechConfigProblems } from "./speech-config";
+import { getModelId, getOutputFormat, getVoiceId, SPEECH_CONTENT_TYPE, speechConfigProblems } from "./speech-config";
+import { isValidSessionId, SESSION_ID_MAX_CHARS, sessionIdErrorMessage } from "./session-id";
 import { SPEECH_MAX_CHARS } from "./types";
 
 /* ------------------------------------------------------------------ */
@@ -13,7 +14,7 @@ import { SPEECH_MAX_CHARS } from "./types";
 
 /** Raw input above this is rejected outright (413) instead of being normalised. */
 export const SPEECH_RAW_MAX_CHARS = 20_000;
-export const SESSION_ID_MAX_CHARS = 128;
+export { SESSION_ID_MAX_CHARS };
 
 const SENTENCE_END = /[.!?…]+["'”’)\]]*(?=\s)/g;
 
@@ -64,12 +65,8 @@ export function validateSpeechRequest(body: unknown): SpeechValidation {
     return { ok: false, status: 400, error: "Request body must be a JSON object { sessionId, text }" };
   }
   const { sessionId, text } = body as Record<string, unknown>;
-  if (typeof sessionId !== "string" || sessionId.trim() === "") {
-    return { ok: false, status: 400, error: "sessionId must be a non-empty string" };
-  }
-  if (sessionId.trim().length > SESSION_ID_MAX_CHARS) {
-    return { ok: false, status: 400, error: `sessionId must be at most ${SESSION_ID_MAX_CHARS} characters` };
-  }
+  // Same rule as /api/critique; also guarantees a valid X-Session-Id header value.
+  if (!isValidSessionId(sessionId)) return { ok: false, status: 400, error: sessionIdErrorMessage() };
   if (typeof text !== "string") {
     return { ok: false, status: 400, error: "text must be a string" };
   }
@@ -277,6 +274,41 @@ export async function getSpeechAudio(
   });
 
   return { cache: "miss", body };
+}
+
+/* ------------------------------------------------------------------ */
+/* Response construction (defence in depth for header-unsafe values)   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Build the 200 audio response. If construction throws (e.g. a header-unsafe
+ * session id slipped past validation) the upstream stream is cancelled so the
+ * ElevenLabs request does not keep running, and null is returned.
+ */
+export async function speechAudioResponse(result: SpeechResult, sessionId: string): Promise<Response | null> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": SPEECH_CONTENT_TYPE,
+      "Cache-Control": "no-store",
+      "X-Session-Id": sessionId,
+      "X-Speech-Cache": result.cache,
+    };
+    if (result.cache === "hit") headers["Content-Length"] = String(result.body.length);
+    return new Response(result.body as BodyInit, { status: 200, headers });
+  } catch {
+    if (result.cache === "miss") await result.body.cancel().catch(() => {});
+    return null;
+  }
+}
+
+/** JSON response that falls back to no extra headers if any of them is invalid. */
+export function safeJsonResponse(body: unknown, status: number, extra: Record<string, string> = {}): Response {
+  const base = { "Cache-Control": "no-store" };
+  try {
+    return Response.json(body, { status, headers: { ...base, ...extra } });
+  } catch {
+    return Response.json(body, { status, headers: base });
+  }
 }
 
 function concat(chunks: Uint8Array[], total: number): Uint8Array {

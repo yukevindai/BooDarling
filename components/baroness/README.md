@@ -21,19 +21,28 @@ GEMINI_API_KEY=            # required when CRITIC_PROVIDER=gemini
 GEMINI_MODEL=gemini-flash-latest
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=qwen3-vl:4b   # `ollama pull qwen3-vl:4b` (Ollama >= 0.12.7)
-CRITIC_TIMEOUT_MS=8000     # total budget incl. one transient retry; then a preset line
+CRITIC_TIMEOUT_MS=8000     # total budget incl. one transient retry; then a preset line (500..120000)
 
 # Voice
 ELEVENLABS_API_KEY=
 ELEVENLABS_VOICE_ID=       # any theatrical voice from your ElevenLabs Voice Library
 ELEVENLABS_MODEL_ID=eleven_multilingual_v2
-SPEECH_TIMEOUT_MS=10000
+SPEECH_TIMEOUT_MS=6000     # per upstream attempt (time to headers); one retry
 # Optional tuning (0..1): ELEVENLABS_STABILITY=0.4 ELEVENLABS_SIMILARITY=0.8 ELEVENLABS_STYLE=0.5
 
 # Optional paths (default: process.cwd() and <root>/references/manifest.json)
 # REFLECT_PROJECT_ROOT=
 # REFERENCES_MANIFEST_PATH=
 ```
+
+**Client deadlines follow the server.** `GET /api/critique` and `GET /api/speech`
+report `detail.timeoutMs`; `AudioSetupControl` passes them to
+`configureBaronessTimeouts()`, so the browser waits
+`max(12s, CRITIC_TIMEOUT_MS + 3s)` for a critique and
+`max(15s, 2 × SPEECH_TIMEOUT_MS + 3s)` for live speech (guidance: 5s). If you do
+not mount `AudioSetupControl`, call
+`configureBaronessTimeouts({ critiqueServerMs, speechServerMs })` yourself, or the
+12s / 15s defaults apply (too short if `CRITIC_TIMEOUT_MS` > 9000).
 
 Only the selected critic provider needs credentials. Without any keys the app
 still works: critiques fall back to preset lines (`source: "preset"`) and the
@@ -49,10 +58,11 @@ and copy its Voice ID. No voice cloning.
 import { useBaroness, BaronessCritique, BaronessGuidance, AudioSetupControl } from "@/components/baroness";
 
 // Operator setup screen — block "Ready" until audioUnlocked is true.
+// (Also configures client timeouts from the server's readiness; see above.)
 <AudioSetupControl onReadyChange={({ audioUnlocked, critic, speech }) => setAudioReady(audioUnlocked)} />
 
 const baroness = useBaroness();
-// Person detected (new sessionId):   baroness.startSession(sessionId);
+// Person detected (new sessionId):   baroness.startSession(sessionId);   // please do call this
 // Framing guidance from R2:          baroness.guide("step-back");    // throttled; silent once the critique starts
 // Analysing (optional):              baroness.announce("analysing");
 // RateResult arrived (ok or unavailable):
@@ -68,8 +78,26 @@ baroness.cancel();                  // aborts request, stops audio, drops late r
 
 Guarantees: `run()` never rejects; one critique per session (a repeated `run`
 for the same session returns the same promise); text appears before audio and
-remains if audio fails; every playback has a safety timeout so the flow cannot
-get stuck.
+remains if audio fails; every playback has a safety timeout (clip duration + 3s,
+max 60s) so the flow cannot get stuck.
+
+**Stale runs are refused.** `run()` resolves `{ cancelled: true }` immediately —
+no request, no audio, no state change — when its `capture.sessionId`:
+
+- was cancelled (`cancel()`), or superseded by `startSession(other)` or by a
+  `run()` for another session (the last 64 retired ids are remembered), or
+- differs from the session passed to the latest `startSession()`.
+
+So **R1 should call `baroness.startSession(newId)` on person-detected**: a late
+`run()` from the previous visitor (rating resolved after they left) can then
+never abort the new visitor or roast an empty room. `run()` without any
+`startSession()` still works (each new id supersedes and retires the previous
+one). `cancel()` forgets the started session, so the next visitor may again use
+either style. The pure decision is exported as `decideRun()` for tests.
+
+**Operator audio test** never interrupts a visitor: while a visitor session is
+active, the setup button only unlocks audio (if still locked) and is otherwise
+disabled with a hint.
 
 Guidance keys (R2 → R4): `step-back`, `step-closer`, `move-left`, `move-right`,
 `center`, `show-full-outfit`, `hold-still`, `one-at-a-time`, `face-mirror`

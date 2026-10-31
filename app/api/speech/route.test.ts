@@ -102,6 +102,16 @@ describe("POST /api/speech", () => {
     assert.equal(calls.length, 0);
   });
 
+  it("rejects header-unsafe sessionIds with 400 instead of crashing, without calling upstream", async () => {
+    stubFetch(audioResponse);
+    for (const sessionId of ["sess\r\nX-Evil: 1", "セッション", "a\u0000b"]) {
+      const res = await POST(post({ sessionId, text: "Step back, darling." }));
+      assert.equal(res.status, 400, JSON.stringify(sessionId));
+      assert.match(((await res.json()) as { error: string }).error, /sessionId/);
+    }
+    assert.equal(calls.length, 0);
+  });
+
   it("caps text over 500 characters before sending upstream", async () => {
     stubFetch(audioResponse);
     const text = "A fairly long sentence about silhouettes and drama. ".repeat(30);
@@ -200,5 +210,11 @@ describe("GET /api/speech", () => {
     assert.equal(json.ready, false);
     assert.equal(json.provider, "elevenlabs");
     assert.equal(json.problems.length, 2);
+  });
+
+  it("includes detail.timeoutMs (server default 6000ms per upstream attempt)", async () => {
+    delete process.env.ELEVENLABS_API_KEY;
+    const json = (await (await GET()).json()) as { detail: Record<string, unknown> };
+    assert.equal(json.detail.timeoutMs, 6000);
   });
 });

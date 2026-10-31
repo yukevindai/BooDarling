@@ -19,11 +19,12 @@ import { resolveReference as defaultResolveReference, type ResolvedReference } f
 import { getCriticProvider } from "./providers";
 import { isAbortError, isTransientError } from "./providers/errors";
 import { sanitizeCritiqueDetailed } from "./sanitize";
+import { isValidSessionId, SESSION_ID_MAX_CHARS, sessionIdErrorMessage } from "./session-id";
 import type { CriticImage, CriticInput, CriticProvider, CritiqueResponse } from "./types";
 
 /** Raw request body limit for the route (1 MB JPEG as base64 ≈ 1.34 MB + JSON). */
 export const CRITIQUE_MAX_BODY_BYTES = 1_600_000;
-export const SESSION_ID_MAX_CHARS = 128;
+export { SESSION_ID_MAX_CHARS };
 /** Only retry if at least this much of the time budget is left. */
 export const RETRY_MIN_BUDGET_MS = 2500;
 
@@ -79,9 +80,8 @@ export function validateCritiqueRequest(body: unknown): { ok: true; value: Valid
   if (!isObj(result)) return { ok: false, error: "result is required" };
 
   const sessionId = capture.sessionId;
-  if (!nonEmptyString(sessionId, SESSION_ID_MAX_CHARS)) {
-    return { ok: false, error: `capture.sessionId must be a non-empty string of at most ${SESSION_ID_MAX_CHARS} characters` };
-  }
+  // Same rule as /api/speech (header-safe), so every accepted session can be spoken.
+  if (!isValidSessionId(sessionId)) return { ok: false, error: sessionIdErrorMessage("capture.sessionId") };
   if (result.sessionId !== sessionId) return { ok: false, error: "result.sessionId does not match capture.sessionId" };
   if (typeof capture.outfitImage !== "string") return { ok: false, error: "capture.outfitImage must be a data URL string" };
 
@@ -195,7 +195,10 @@ export async function createCritique(body: unknown, opts: CreateCritiqueOptions 
   const cacheKey = critiqueCacheKey({
     outfitImage: req.outfitImage,
     referenceId: req.referenceId,
+    referenceImage: `${referenceImage.mimeType};${referenceImage.base64}`,
     lookId: req.lookId,
+    lookLabel: ref.lookLabel,
+    lookDescription: ref.lookDescription ?? "",
     aura: req.aura,
     modelVersion: req.modelVersion,
     referenceVersion: req.referenceVersion,

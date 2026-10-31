@@ -200,6 +200,40 @@ describe("createCritique", () => {
     assert.equal(failing.calls, 2, "presets are not cached");
   });
 
+  it("does not serve a stale cached critique after the reference image or look metadata changes", async () => {
+    const cache = new LruCache<string>(10, 60_000);
+    const p = new FakeProvider(async () => MODEL_TEXT);
+    let image = REF_IMAGE;
+    let label = "Classic Dalmatian Coat";
+    let description = "Spotted coat.";
+    const extra: Partial<CreateCritiqueOptions> = {
+      cache,
+      loadReferenceImage: async () => image,
+      resolveReference: async (referenceId) => ({
+        referenceId,
+        lookId: "classic-dalmatian",
+        lookLabel: label,
+        lookDescription: description,
+        imagePath: "/virtual/01.jpg",
+      }),
+    };
+    ok(await createCritique(body(), opts(p, extra)));
+    ok(await createCritique(body(), opts(p, extra)));
+    assert.equal(p.calls, 1, "identical inputs hit the cache");
+
+    image = { mimeType: "image/jpeg", base64: "c3dhcHBlZA==" }; // file swapped, same referenceVersion
+    ok(await createCritique(body(), opts(p, extra)));
+    assert.equal(p.calls, 2, "a swapped reference image misses the cache");
+
+    label = "Punk Tour Jacket";
+    ok(await createCritique(body(), opts(p, extra)));
+    assert.equal(p.calls, 3, "a changed look label misses the cache");
+
+    description = "Studded leather.";
+    ok(await createCritique(body(), opts(p, extra)));
+    assert.equal(p.calls, 4, "a changed look description misses the cache");
+  });
+
   it("retries exactly once on a transient error", async () => {
     const p = new FakeProvider(async (_i, _s, call) => {
       if (call === 1) throw new CriticProviderError("HTTP 503", { transient: true, status: 503 });
@@ -275,7 +309,10 @@ describe("validateCritiqueRequest / cache key", () => {
     const base = {
       outfitImage: DATA_URL,
       referenceId: "r",
+      referenceImage: "image/jpeg;cmVm",
       lookId: "l",
+      lookLabel: "Label",
+      lookDescription: "Desc",
       aura: 1,
       modelVersion: "m",
       referenceVersion: "rv",

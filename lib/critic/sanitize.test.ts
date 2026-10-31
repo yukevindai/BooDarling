@@ -106,6 +106,39 @@ describe("sanitizeCritique", () => {
     }
   });
 
+  it("allows costume makeup, idioms and persona words (eyes, lady, man-tailored, young, face it)", () => {
+    for (const ok of [
+      "Face it, darling, the coat is timid. Add red gloves and commit to the contrast.",
+      "The smoky eyes are the only villainous thing here. Match that eyeliner with a sharper collar.",
+      "A lady of leisure would never settle for beige. Swap it for black and white and stride.",
+      "That man-tailored blazer is a promising start. Now add a fur stole and some menace.",
+      "The night is young and so is this idea. Push the spots harder and commit.",
+      "The face paint is doing the heavy lifting. Let the coat carry some of the menace.",
+      "Time to face the music, darling. That cardigan has to go.",
+      "Dramatic makeup and red lipstick sell it. Now give the coat the same conviction.",
+      "An about-face from last season, darling. Keep the gloves and lose the beige.",
+    ]) {
+      assert.equal(sanitizeCritique(ok), ok, ok);
+    }
+  });
+
+  it("still blocks genuine body / identity references", () => {
+    for (const bad of [
+      "Your face looks tired tonight. Add a brighter scarf, darling.",
+      "Your face, it seems, has given up. Add red gloves.",
+      "That coat makes you look fat, darling. Try a longer line.",
+      "You look younger in black, darling. Wear more of it.",
+      "The man in this coat looks lost. Commit to the spots.",
+      "Your skin colour clashes with the coat. Try black instead.",
+      "Your weight is not the problem here. The coat is.",
+      "So skinny the coat swallows you. Add a belt, darling.",
+      "Your race has nothing to do with this coat. Add red gloves.",
+      "Such a pretty woman in such a dull coat. Add red gloves.",
+    ]) {
+      assert.equal(sanitizeCritiqueDetailed(bad).reason, "blocked-term", bad);
+    }
+  });
+
   it("accepts every mock and preset line", () => {
     for (const aura of [0, 10, 30, 55, 80, 95, 100]) {
       for (const lookId of ["classic-dalmatian", "red-gown", "punk-tour"]) {

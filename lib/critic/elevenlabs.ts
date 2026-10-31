@@ -188,6 +188,8 @@ export async function elevenLabsReadiness(): Promise<BaronessReadiness> {
     voiceId: voiceId ?? "",
     modelId: getModelId(),
     outputFormat: getOutputFormat(),
+    /** Per-attempt upstream timeout; the browser sizes its own deadline from it. */
+    timeoutMs: getTimeoutMs(),
   };
   const problems = speechConfigProblems();
   const apiKey = getApiKey();
@@ -205,8 +207,12 @@ export async function elevenLabsReadiness(): Promise<BaronessReadiness> {
       } catch {
         // voice name is optional
       }
-    } else if (res.status === 401) {
-      problems.push("ElevenLabs rejected the API key (HTTP 401)");
+    } else if (res.status === 401 || res.status === 403) {
+      // A TTS-only key (no voices_read permission) also gets 401 here, so this
+      // does not prove the key is bad.
+      problems.push(
+        `Could not verify voice (key invalid or missing voices_read permission) — use Test audio to confirm (HTTP ${res.status})`,
+      );
     } else {
       problems.push(`Voice not accessible (HTTP ${res.status})`);
     }

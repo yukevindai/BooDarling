@@ -9,13 +9,18 @@
  */
 import { ANNOUNCEMENT_LINES, pickPresetCritique } from "@/lib/critic/lines";
 import type { Capture, CritiqueResponse, CritiqueRequest, RateResult } from "@/lib/critic/types";
+import { critiqueClientTimeoutMs, DEFAULT_CRITIQUE_CLIENT_TIMEOUT_MS } from "./timeouts";
 
-export const DEFAULT_CRITIQUE_TIMEOUT_MS = 12_000;
+/** Floor for the client deadline; the effective default follows the server (see timeouts.ts). */
+export const DEFAULT_CRITIQUE_TIMEOUT_MS = DEFAULT_CRITIQUE_CLIENT_TIMEOUT_MS;
 
 export type RequestCritiqueOptions = {
   /** Caller cancellation (e.g. visitor departed). Aborting rejects with CritiqueDiscardedError. */
   signal?: AbortSignal;
-  /** Client-side deadline before falling back to a preset. Default 12000. */
+  /**
+   * Client-side deadline before falling back to a preset.
+   * Default: max(12000, server CRITIC_TIMEOUT_MS + 3000) once configured (see timeouts.ts).
+   */
   timeoutMs?: number;
 };
 
@@ -53,7 +58,7 @@ function parseResponse(value: unknown): CritiqueResponse | null {
 export async function requestCritique(
   capture: Capture,
   result: RateResult,
-  { signal, timeoutMs = DEFAULT_CRITIQUE_TIMEOUT_MS }: RequestCritiqueOptions = {},
+  { signal, timeoutMs = critiqueClientTimeoutMs() }: RequestCritiqueOptions = {},
 ): Promise<CritiqueResponse> {
   if (signal?.aborted) throw new CritiqueDiscardedError("aborted");
 

@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import { ANNOUNCEMENT_LINES, pickPresetCritique } from "../../lib/critic/lines";
 import type { Capture, RateResult } from "../../lib/critic/types";
 import { CritiqueDiscardedError, isCritiqueDiscarded, requestCritique } from "./critique-client";
+import { configureBaronessTimeouts, resetBaronessTimeouts } from "./timeouts";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -86,6 +87,25 @@ describe("requestCritique", () => {
     const r = await requestCritique(capture, ok, { timeoutMs: 40 });
     assert.equal(r.source, "preset");
     assert.ok(Date.now() - started < 1000);
+  });
+
+  it("default client deadline follows the server's CRITIC_TIMEOUT_MS (max(12s, server + 3s))", async () => {
+    const realSetTimeout = globalThis.setTimeout;
+    const delays: number[] = [];
+    globalThis.fetch = (async () => json({ sessionId: "s-1", text: "Fine. Very fine.", source: "model" })) as typeof fetch;
+    globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+      delays.push(ms ?? 0);
+      return realSetTimeout(fn, ms);
+    }) as typeof setTimeout;
+    try {
+      await requestCritique(capture, ok);
+      configureBaronessTimeouts({ critiqueServerMs: 60_000 });
+      await requestCritique(capture, ok);
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      resetBaronessTimeouts();
+    }
+    assert.deepEqual(delays, [12_000, 63_000]);
   });
 
   it("discards a response for a different session", async () => {

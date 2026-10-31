@@ -32,7 +32,7 @@ export const GUIDANCE_LINES: Record<GuidanceKey, BaronessLine> = {
   "move-left": { id: "guidance-move-left", text: "A touch to your left, darling." },
   "move-right": { id: "guidance-move-right", text: "A touch to your right, darling." },
   center: { id: "guidance-center", text: "Centre yourself in my mirror, darling." },
-  "show-full-outfit": { id: "guidance-show-full-outfit", text: "Show me everything, shoulders to hem. Nothing hides from me." },
+  "show-full-outfit": { id: "guidance-show-full-outfit", text: "Show me everything, top to hem. Nothing hides from me." },
   "hold-still": { id: "guidance-hold-still", text: "Hold still. Genius cannot be rushed." },
   "one-at-a-time": { id: "guidance-one-at-a-time", text: "One at a time, please. I only judge one disaster at a time." },
   "face-mirror": { id: "guidance-face-mirror", text: "Face the mirror, darling. Fashion is a frontal assault." },
@@ -76,7 +76,7 @@ export function scoreBand(aura: number): ScoreBand {
 export const PRESET_CRITIQUES: Record<ScoreBand, BaronessLine[]> = {
   iconic: [
     { id: "preset-iconic-1", text: "Well. I'm almost irritated by how little I have to say. Keep the attitude exactly where it is and own every step." },
-    { id: "preset-iconic-2", text: "At last, someone who read the brief. Hold your chin higher and let the look do the talking." },
+    { id: "preset-iconic-2", text: "At last, someone who read the brief. Carry it with more swagger and let the look do the talking." },
   ],
   strong: [
     { id: "preset-strong-1", text: "Not bad, darling, not bad at all. Commit to one more bold detail and you might frighten me." },

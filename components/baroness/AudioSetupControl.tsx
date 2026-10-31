@@ -6,14 +6,18 @@
  *
  * - "Enable & test audio": unlocks the shared audio element inside the click
  *   handler, then speaks the audio-test line under a temporary session.
+ *   While a visitor session is active the test line is never played (it would
+ *   cut the visitor's audio): the button only unlocks, or is disabled once unlocked.
  * - Fetches GET /api/critique and GET /api/speech and lists provider/model/voice
  *   and problems. Speech not ready is a warning (text-only still works); audio
- *   unlocked is what the hands-free audio flow requires.
+ *   unlocked is what the hands-free audio flow requires. The reported server
+ *   timeouts configure the client deadlines (configureBaronessTimeouts).
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ANNOUNCEMENT_LINES } from "@/lib/critic/lines";
 import type { BaronessReadiness } from "@/lib/critic/types";
 import { getBaronessVoice, type SpeakOutcome, type VoiceState } from "./audio";
+import { isVisitorSessionActive, speakAudioTest } from "./audio-test";
+import { configureBaronessTimeouts } from "./timeouts";
 import styles from "./Baroness.module.css";
 
 export type AudioSetupState = {
@@ -85,6 +89,7 @@ export function AudioSetupControl({ onReadyChange, className }: AudioSetupContro
   const refresh = useCallback(async () => {
     setChecking(true);
     const [c, s] = await Promise.all([fetchReadiness("/api/critique"), fetchReadiness("/api/speech")]);
+    configureBaronessTimeouts({ critiqueServerMs: c?.detail.timeoutMs, speechServerMs: s?.detail.timeoutMs });
     setCritic(c);
     setSpeech(s);
     setChecking(false);
@@ -104,6 +109,8 @@ export function AudioSetupControl({ onReadyChange, className }: AudioSetupContro
     cb.current?.({ audioUnlocked: unlocked, critic, speech });
   }, [unlocked, critic, speech, checking]);
 
+  const visitorActive = isVisitorSessionActive(voiceState.sessionId);
+
   const enableAndTest = useCallback(async () => {
     // Unlock FIRST and synchronously inside the click handler (user gesture).
     const unlocking = voice.unlock();
@@ -116,11 +123,9 @@ export function AudioSetupControl({ onReadyChange, className }: AudioSetupContro
         setUnlockFailed(true);
         return;
       }
-      const previous = voice.getActiveSession();
-      const tempId = `audio-test-${Date.now().toString(36)}`;
-      voice.setActiveSession(tempId);
-      const outcome = await voice.speak(tempId, ANNOUNCEMENT_LINES["audio-test"].text, { kind: "announcement" });
-      voice.setActiveSession(previous);
+      // Never speak over a live visitor (speakAudioTest also guards this).
+      if (isVisitorSessionActive(voice.getActiveSession())) return;
+      const outcome = await speakAudioTest(voice);
       setTestResult(outcome);
       void refresh();
     } finally {
@@ -136,13 +141,31 @@ export function AudioSetupControl({ onReadyChange, className }: AudioSetupContro
       <h2 className={styles.setupTitle}>Baroness audio</h2>
 
       <div className={styles.setupActions}>
-        <button type="button" className={styles.setupButton} onClick={enableAndTest} disabled={busy}>
-          {busy ? "Testing…" : unlocked ? "Test audio again" : "Enable & test audio"}
+        <button
+          type="button"
+          className={styles.setupButton}
+          onClick={enableAndTest}
+          disabled={busy || (unlocked && visitorActive)}
+          aria-describedby={unlocked && visitorActive ? "baroness-test-hint" : undefined}
+        >
+          {busy
+            ? "Testing…"
+            : unlocked
+              ? "Test audio again"
+              : visitorActive
+                ? "Enable audio"
+                : "Enable & test audio"}
         </button>
         <button type="button" className={styles.setupGhost} onClick={() => void refresh()} disabled={checking}>
           {checking ? "Checking…" : "Re-check"}
         </button>
       </div>
+
+      {unlocked && visitorActive && (
+        <p id="baroness-test-hint" className={styles.setupNote} data-tone="warn">
+          Test disabled while a visitor session is active.
+        </p>
+      )}
 
       <ul className={styles.setupList}>
         <Row label="Audio" tone={unlocked ? "ok" : "bad"}>

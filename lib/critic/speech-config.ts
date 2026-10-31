@@ -8,7 +8,11 @@
 
 export const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
 export const DEFAULT_OUTPUT_FORMAT = "mp3_44100_128";
-export const DEFAULT_TIMEOUT_MS = 10_000;
+/**
+ * Per-attempt time-to-headers. Two attempts + the retry delay must fit inside the
+ * browser's speech deadline (components/baroness/timeouts.ts: 2 * this + 3s).
+ */
+export const DEFAULT_TIMEOUT_MS = 6_000;
 
 /** The route always responds with MP3, so only `mp3_*` output formats are accepted. */
 export const SPEECH_CONTENT_TYPE = "audio/mpeg";

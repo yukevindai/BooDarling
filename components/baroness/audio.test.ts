@@ -6,12 +6,14 @@ import {
   createBaronessVoice,
   GuidanceThrottle,
   isSessionActive,
+  metadataSafetyMs,
   playbackSafetyMs,
   silentWavDataUri,
   type AudioLike,
   type VoiceEnv,
   type VoiceState,
 } from "./audio";
+import { configureBaronessTimeouts, resetBaronessTimeouts } from "./timeouts";
 
 /* ----------------------------------------------------------------- fakes */
 
@@ -20,6 +22,8 @@ class FakeAudio implements AudioLike {
   volume = 1;
   onended: ((ev: unknown) => void) | null = null;
   onerror: ((ev: unknown) => void) | null = null;
+  onloadedmetadata: ((ev: unknown) => void) | null = null;
+  duration = NaN;
   plays: string[] = [];
   paused = 0;
   playImpl: () => Promise<void> = () => Promise.resolve();
@@ -36,6 +40,10 @@ class FakeAudio implements AudioLike {
   load() {}
   end() {
     this.onended?.({});
+  }
+  metadata(durationSec: number) {
+    this.duration = durationSec;
+    this.onloadedmetadata?.({});
   }
 }
 
@@ -141,6 +149,16 @@ describe("pure helpers", () => {
     assert.equal(playbackSafetyMs("x".repeat(5000)), 25000);
     const mid = playbackSafetyMs("x".repeat(100));
     assert.ok(mid > 6000 && mid < 25000);
+  });
+
+  it("metadataSafetyMs: real duration + 3s, capped at 60s, null when unknown", () => {
+    assert.equal(metadataSafetyMs(10), 13_000);
+    assert.equal(metadataSafetyMs(0.5), 3_500);
+    assert.equal(metadataSafetyMs(120), 60_000);
+    assert.equal(metadataSafetyMs(NaN), null);
+    assert.equal(metadataSafetyMs(Infinity), null);
+    assert.equal(metadataSafetyMs(0), null);
+    assert.equal(metadataSafetyMs(undefined), null);
   });
 
   it("silentWavDataUri is a valid RIFF/WAVE data URI", () => {
@@ -364,9 +382,97 @@ describe("BaronessVoice", () => {
     const p = v.speak("s1", "Some words. More words.");
     await flush();
     advance(8001);
+    await flush();
+    assert.equal(v.getState().sessionId, "s1");
+    let settled = false;
+    void p.then(() => (settled = true));
+    advance(14_999 - 8001);
+    await flush();
+    assert.equal(settled, false, "client must outlast the server's two upstream attempts (default 15s)");
+    advance(2);
     const out = await p;
     assert.equal(out.played, false);
     assert.match(out.reason ?? "", /AbortError/);
+  });
+
+  it("sizes the speech fetch deadline from the server timeout (2 * server + 3s)", async () => {
+    try {
+      configureBaronessTimeouts({ speechServerMs: 10_000 });
+      const { env, advance } = makeEnv({ "/api/speech": () => new Promise<Response>(() => {}) });
+      const v = createBaronessVoice(env);
+      v.setActiveSession("s1");
+      let settled = false;
+      const p = v.speak("s1", "Some words. More words.");
+      void p.then(() => (settled = true));
+      await flush();
+      advance(22_999);
+      await flush();
+      assert.equal(settled, false);
+      advance(2);
+      assert.match((await p).reason ?? "", /AbortError/);
+    } finally {
+      resetBaronessTimeouts();
+    }
+  });
+
+  it("extends the playback safety timeout to the real clip duration after loadedmetadata", async () => {
+    const { env, audio, advance } = makeEnv({ "/api/speech": () => audioResponse() });
+    const v = createBaronessVoice(env);
+    v.setActiveSession("s1");
+    const p = v.speak("s1", "Some words. More words.");
+    await flush();
+    assert.equal(v.getState().speaking, true);
+    audio.metadata(40); // slow theatrical delivery: 40s
+    advance(30_000); // the text-length estimate (max 25s) would have cut it here
+    await flush();
+    assert.equal(v.getState().speaking, true);
+    advance(13_001);
+    assert.equal((await p).reason, "timeout");
+  });
+
+  it("keeps the estimate when the duration is unknown (streamed / Infinity)", async () => {
+    const { env, audio, advance } = makeEnv({ "/api/speech": () => audioResponse() });
+    const v = createBaronessVoice(env);
+    v.setActiveSession("s1");
+    const p = v.speak("s1", "Some words. More words.");
+    await flush();
+    audio.metadata(Infinity);
+    advance(playbackSafetyMs("Some words. More words.") + 1);
+    assert.equal((await p).reason, "timeout");
+  });
+
+  it("unlock succeeds when an utterance's play() interrupts the unlock's pending play()", async () => {
+    const { env, audio } = makeEnv({ "/api/speech": () => audioResponse() });
+    let rejectUnlock: ((e: unknown) => void) | null = null;
+    audio.playImpl = () => {
+      if (audio.src.startsWith("data:audio/wav")) {
+        return new Promise<void>((_res, rej) => {
+          rejectUnlock = rej;
+        });
+      }
+      // A new load interrupts the pending unlock play().
+      rejectUnlock?.(new DOMException("The play() request was interrupted by a new load request.", "AbortError"));
+      return Promise.resolve();
+    };
+    const v = createBaronessVoice(env);
+    const unlocking = v.unlock();
+    v.setActiveSession("s1");
+    const p = v.speak("s1", "Some words. More words.");
+    assert.equal(await unlocking, true);
+    assert.equal(v.isUnlocked(), true);
+    await flush();
+    assert.equal(v.getState().speaking, true, "the utterance keeps playing");
+    assert.ok(audio.src.startsWith("blob:"), "unlock must not reset the element under the utterance");
+    audio.end();
+    assert.equal((await p).played, true);
+  });
+
+  it("unlock still fails on a real AbortError when nothing took over the element", async () => {
+    const { env, audio } = makeEnv({});
+    audio.playImpl = () => Promise.reject(new DOMException("aborted", "AbortError"));
+    const v = createBaronessVoice(env);
+    assert.equal(await v.unlock(), false);
+    assert.equal(v.isUnlocked(), false);
   });
 
   describe("guidance", () => {

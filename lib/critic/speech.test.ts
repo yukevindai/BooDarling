@@ -4,6 +4,8 @@ import { allScriptedLines } from "./lines";
 import {
   AudioCache,
   normalizeSpeechText,
+  safeJsonResponse,
+  speechAudioResponse,
   speechCacheKey,
   validateSpeechRequest,
 } from "./speech";
@@ -78,6 +80,13 @@ describe("validateSpeechRequest", () => {
     assert.ok(validateSpeechRequest({ sessionId: "s".repeat(128), text: "hi" }).ok);
   });
 
+  it("rejects header-unsafe sessionIds (CR/LF, control, non-ASCII)", () => {
+    for (const sessionId of ["a\nb", "a\r\nX-Evil: 1", "a\u0000b", "セッション"]) {
+      const r = validateSpeechRequest({ sessionId, text: "hi" });
+      assert.ok(!r.ok && r.status === 400, JSON.stringify(sessionId));
+    }
+  });
+
   it("rejects missing, non-string and empty text", () => {
     for (const text of [undefined, 1, "", "   ", "\u{1F480}"]) {
       const r = validateSpeechRequest({ sessionId: "s", text });
@@ -138,5 +147,36 @@ describe("AudioCache", () => {
     c.set("a", bytes(10));
     assert.equal(c.bytes, 10);
     assert.equal(c.size, 1);
+  });
+});
+
+describe("speechAudioResponse / safeJsonResponse (defence in depth)", () => {
+  it("builds the audio response with session + cache headers", async () => {
+    const res = await speechAudioResponse({ cache: "hit", body: new Uint8Array([1, 2, 3]) }, "s1");
+    assert.ok(res);
+    assert.equal(res.headers.get("x-session-id"), "s1");
+    assert.equal(res.headers.get("content-length"), "3");
+    assert.equal(res.headers.get("content-type"), "audio/mpeg");
+  });
+
+  it("returns null and cancels the upstream stream when headers are invalid", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull() {},
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const res = await speechAudioResponse({ cache: "miss", body }, "bad\nid");
+    assert.equal(res, null);
+    assert.equal(cancelled, true);
+  });
+
+  it("safeJsonResponse drops invalid extra headers instead of throwing", async () => {
+    const res = safeJsonResponse({ error: "x" }, 502, { "X-Session-Id": "セ" });
+    assert.equal(res.status, 502);
+    assert.equal(res.headers.get("x-session-id"), null);
+    assert.equal(res.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await res.json(), { error: "x" });
   });
 });
