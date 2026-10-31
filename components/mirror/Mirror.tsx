@@ -75,11 +75,12 @@ export default function Mirror() {
     } catch { /* text stays visible */ }
   }, []);
 
-  // Start a session. Triggers: R2 presence (hands-free), the spoken phrase, or the fallback link.
+  // Start a session. Triggers: the spoken phrase (always listening while waiting) or the operator's
+  // fallback link. Arrival alone never starts a session — the visitor must ask the mirror.
   const reveal = useCallback(() => {
     if (phase.current !== "waiting") return;
     phase.current = "framing";
-    recRef.current?.stop(); setListening(false);
+    const rec = recRef.current; recRef.current = null; rec?.stop(); setListening(false);
     ctrl.current?.abort(); ctrl.current = new AbortController();
     setGuide({ message: null, progress: 0 });
     const id = crypto.randomUUID();
@@ -93,23 +94,48 @@ export default function Mirror() {
     dispatch({ type: "reset" });
   }, []);
 
-  // Results button: start over straight away if the visitor is still standing there.
-  const again = useCallback(() => { reset(); if (present.current) reveal(); }, [reset, reveal]);
+  // Results button: back to the mirror, which waits for the phrase again.
+  const again = useCallback(() => { reset(); }, [reset]);
 
-  const listen = () => {
+  // Speech recognition stays on while waiting so visitors only have to speak the phrase.
+  // Chrome ends continuous recognition after silence; restart it while still waiting.
+  // A permission error ("not-allowed") stops the loop and leaves the mic button for the operator.
+  const micBlocked = useRef(false);
+  const listen = useCallback(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR || recRef.current || phase.current !== "waiting") return;
+    micBlocked.current = false;
     const r = new SR(); r.lang = "en-US"; r.continuous = true; r.interimResults = true;
     r.onresult = (e: any) => {
       const t = Array.from(e.results).map((x: any) => x[0].transcript).join(" ").toLowerCase();
       setHeard(t); if (PHRASE_OK(t)) reveal();
     };
-    r.onend = () => setListening(false); r.onerror = () => setListening(false);
-    recRef.current = r; r.start(); setListening(true);
-  };
+    let failed = false;
+    r.onerror = (e: any) => {
+      if (e?.error === "not-allowed" || e?.error === "service-not-allowed") micBlocked.current = true;
+      // "no-speech"/"aborted" are routine (silence, our own stop); anything else backs off.
+      else if (e?.error !== "no-speech" && e?.error !== "aborted") failed = true;
+    };
+    r.onend = () => {
+      if (recRef.current === r) recRef.current = null;
+      setListening(false);
+      if (!micBlocked.current && phase.current === "waiting") setTimeout(() => listen(), failed ? 2000 : 300);
+    };
+    recRef.current = r;
+    try { r.start(); setListening(true); } catch { recRef.current = null; setListening(false); }
+  }, [reveal]);
+
+  // Listen whenever the mirror is waiting (after setup and after every reset).
+  useEffect(() => {
+    if (s.phase === "waiting" && canSR) listen();
+  }, [s.phase, canSR, listen]);
 
   const begin = async () => {
     new Audio(SILENT).play().catch(() => {}); // unlock browser audio via user gesture
+    // Ask for the microphone now (operator setup) so the always-on phrase listener never prompts a visitor.
+    navigator.mediaDevices?.getUserMedia?.({ audio: true })
+      .then((st) => st.getTracks().forEach((t) => t.stop()))
+      .catch(() => { /* mic denied: the fallback link still works */ });
     // Warm the pose model while the camera prompt is up (spec §3). Not awaited: the mirror opens
     // as soon as the camera runs; ReflectCamera picks up the same cached detector.
     if (pose === "idle" || pose === "error") {
@@ -145,13 +171,11 @@ export default function Mirror() {
     } catch { /* aborted on departure */ }
   }, [speak]);
 
-  // R2 presence (debounced): arrival while waiting starts a session, departure ends it (spec §2).
+  // R2 presence (debounced): departure ends a session (spec §2). Arrival does not start one.
   const onPresenceChange = useCallback((p: boolean) => {
     present.current = p;
-    const action = presenceAction(phase.current, p);
-    if (action === "reveal") reveal();
-    else if (action === "reset") reset();
-  }, [reveal, reset]);
+    if (presenceAction(phase.current, p) === "reset") reset();
+  }, [reset]);
 
   const onFramingChange = useCallback((f: FramingState) => {
     if (f.status === "capturing" && phase.current === "framing") dispatch({ type: "countdown" });
