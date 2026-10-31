@@ -55,6 +55,7 @@ export default function BooCamp({ videoRef, runId, onSay, onDone }: Props) {
   return (
     <div className={s.wrap} aria-live="polite">
       <p className={s.kicker}>BooCamp</p>
+      <FaceBadge phase={st.phase} visible={st.faceVisible} />
 
       {st.phase === "loading" && <p className={s.line}>Summoning the scare-o-meter…</p>}
 
@@ -90,6 +91,22 @@ export default function BooCamp({ videoRef, runId, onSay, onDone }: Props) {
 
       {st.phase === "skipped" && <p className={s.line}>{LINES.skipped}</p>}
     </div>
+  );
+}
+
+/** Live tracking indicator, so operators can see whether the face model is actually finding a face. */
+function FaceBadge({ phase, visible }: { phase: string; visible: boolean }) {
+  if (phase === "done") return null;
+  const [cls, text] =
+    phase === "loading" ? [s.badgeLoading, "Loading face model…"]
+    : phase === "skipped" ? [s.badgeOff, "No face detected"]
+    : visible ? [s.badgeOn, "Face detected"]
+    : [s.badgeOff, "No face detected"];
+  return (
+    <p className={`${s.badge} ${cls}`} role="status">
+      <span className={s.dot} aria-hidden />
+      {text}
+    </p>
   );
 }
 
