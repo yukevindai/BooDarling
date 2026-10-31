@@ -1,43 +1,28 @@
-// Shared camera stream helper.
-//
-// OWNER: R1 (Integration/UI). R1 owns the single shared camera stream. This is a
-// minimal placeholder so R2's capture pipeline can be exercised end-to-end in the
-// demo harness. R1 coordinates the real implementation.
+"use client";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-export interface CameraOptions {
-  width?: number;
-  height?: number;
-  facingMode?: "user" | "environment";
-}
+// R1 owns the ONE camera stream. Others receive videoRef.
+export function useCamera() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
-/**
- * Request the webcam. MUST be called from a user gesture (operator setup) so the
- * browser grants camera permission and allows audio playback later.
- */
-export async function startCamera(options: CameraOptions = {}): Promise<MediaStream> {
-  const { width = 1280, height = 720, facingMode = "user" } = options;
-  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-    throw new Error("Camera API unavailable in this environment.");
-  }
-  return navigator.mediaDevices.getUserMedia({
-    video: {
-      width: { ideal: width },
-      height: { ideal: height },
-      facingMode,
-    },
-    audio: false,
-  });
-}
+  const start = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}); }
+      setReady(true); setError(null);
+    } catch { setError("Camera blocked. Allow camera access in the browser and reload."); }
+  }, []);
 
-/** Release all tracks when the operator stops the app. */
-export function stopCamera(stream: MediaStream | null): void {
-  stream?.getTracks().forEach((track) => track.stop());
-}
+  const stop = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null; setReady(false);
+  }, []);
 
-/** Generate a unique session id for one assessment. */
-export function newSessionId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  useEffect(() => () => stop(), [stop]);
+  return { videoRef, start, stop, ready, error };
 }

@@ -1,25 +1,10 @@
 {
-  "name": "reflect-cruella-mirror",
+  "name": "hack-or-treat",
   "version": "0.1.0",
   "private": true,
-  "description": "Reflect — hands-free Cruella costume mirror (MVP)",
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@mediapipe/tasks-vision": "^0.10.18",
-    "next": "^15.1.6",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
-  },
+  "scripts": { "dev": "next dev", "build": "next build", "start": "next start" },
+  "dependencies": { "next": "14.2.15", "react": "18.3.1", "react-dom": "18.3.1" },
   "devDependencies": {
-    "@types/node": "^22.10.7",
-    "@types/react": "^19.0.7",
-    "@types/react-dom": "^19.0.3",
-    "typescript": "^5.7.3"
+    "@types/node": "20.14.10", "@types/react": "18.3.3", "@types/react-dom": "18.3.0", "typescript": "5.5.4"
   }
 }
