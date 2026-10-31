@@ -15,6 +15,8 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Vercel function ceiling; audio streams for several seconds after the first byte.
+export const maxDuration = 60;
 
 function json(body: unknown, status: number, extra: Record<string, string> = {}): Response {
   return safeJsonResponse(body, status, extra);

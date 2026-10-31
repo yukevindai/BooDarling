@@ -15,6 +15,8 @@ import type { Capture, RateResult } from "@/lib/types";
 // Always run on the server; never statically optimize.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Vercel function ceiling; the upstream call itself is bounded by SERVICE_TIMEOUT_MS.
+export const maxDuration = 30;
 
 const MAX_DECODED_IMAGE_BYTES = 1024 * 1024; // 1 MB (spec §8)
 const SERVICE_TIMEOUT_MS = 20_000;
@@ -28,6 +30,22 @@ function json(result: RateResult, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+/**
+ * Headers for the similarity service. When the service is reachable from the
+ * internet (e.g. a tunnel to the demo laptop for a Vercel deployment), set the same
+ * SIMILARITY_SERVICE_TOKEN on both sides so only this server can call /rate.
+ */
+function serviceHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    // Harmless elsewhere; skips ngrok's browser interstitial if an ngrok tunnel is used.
+    "ngrok-skip-browser-warning": "1",
+  };
+  const token = process.env.SIMILARITY_SERVICE_TOKEN;
+  if (token) headers.authorization = `Bearer ${token}`;
+  return headers;
 }
 
 /** Byte length of the base64 payload inside a data URL, without decoding it. */
@@ -84,7 +102,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     upstream = await fetch(`${baseUrl.replace(/\/$/, "")}/rate`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: serviceHeaders(),
       // Forward only the frozen Capture fields; never pass client-supplied anchors.
       body: JSON.stringify({
         sessionId: capture.sessionId,

@@ -13,6 +13,8 @@ import type { BaronessReadiness } from "../../../lib/critic/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Vercel function ceiling; critic budget is CRITIC_TIMEOUT_MS (default 8s).
+export const maxDuration = 30;
 
 function json(body: unknown, status: number): Response {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
