@@ -10,6 +10,8 @@ export const metadata: Metadata = { title: "Boo, Darling!", description: "Let th
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en"><body className={`${title.variable} ${display.variable} ${serif.variable}`}>{children}</body></html>
+    <html lang="en" className={`${title.variable} ${display.variable} ${serif.variable}`}>
+      <body>{children}</body>
+    </html>
   );
 }
