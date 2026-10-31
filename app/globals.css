@@ -1,5 +1,5 @@
 :root{--jet:#090909;--blood:#B51220;--ivory:#F4F0E8;--silver:#BFC0C0;--gold:#d9a94f;--wine:#5e1015;
-  --display:var(--font-serif),serif;--serif:var(--font-serif),serif}
+  --display:var(--font-display),serif;--serif:var(--font-serif),serif}
 *{box-sizing:border-box}
 button,input,textarea{font-family:inherit}
 html,body{margin:0;min-height:100%;background:var(--wine);color:var(--ivory);font-family:var(--serif);font-size:20px}
