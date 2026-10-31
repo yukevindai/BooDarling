@@ -19,6 +19,7 @@ revealed. She **never** computes or changes the score (spec §1, §5).
 CRITIC_PROVIDER=gemini
 GEMINI_API_KEY=            # required when CRITIC_PROVIDER=gemini
 GEMINI_MODEL=gemini-flash-latest
+GEMINI_FALLBACK_MODELS=gemini-flash-lite-latest,gemini-2.5-flash   # tried in order when the primary is overloaded (429/5xx) or gone (404); "none" disables
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=qwen3-vl:4b   # `ollama pull qwen3-vl:4b` (Ollama >= 0.12.7)
 CRITIC_TIMEOUT_MS=8000     # total budget incl. one transient retry; then a preset line (500..120000)

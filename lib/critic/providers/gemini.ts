@@ -3,7 +3,7 @@
  * https://ai.google.dev/gemini-api/docs/image-understanding
  */
 import { BARONESS_SYSTEM_PROMPT, buildBaronessUserPrompt } from "../../baroness-prompt";
-import { geminiApiKey, geminiModel } from "../config";
+import { geminiApiKey, geminiFallbackModels, geminiModel } from "../config";
 import type { BaronessReadiness, CriticInput, CriticProvider } from "../types";
 import { CriticProviderError, fetchJson, isAbortError } from "./errors";
 
@@ -94,25 +94,50 @@ let readinessCache: { at: number; key: string; value: BaronessReadiness } | null
 /** Cache successful checks longer than failures so the operator sees fixes quickly. */
 const READINESS_TTL_MS = { ok: 30_000, fail: 5_000 };
 
+/** Overloaded / unavailable / unknown model: worth trying the next model in the chain. */
+function shouldFailOver(err: unknown): boolean {
+  if (isAbortError(err) || !(err instanceof CriticProviderError) || err.status === undefined) return false;
+  return err.status === 404 || err.status === 429 || err.status >= 500;
+}
+
 export class GeminiCriticProvider implements CriticProvider {
   readonly id = "gemini";
   readonly model: string;
+  /** Primary first, then fallbacks (deduplicated). */
+  readonly models: string[];
 
-  constructor(model: string = geminiModel()) {
+  constructor(model: string = geminiModel(), fallbacks: string[] = geminiFallbackModels()) {
     this.model = normaliseModel(model);
+    this.models = [...new Set([this.model, ...fallbacks.map(normaliseModel)])];
   }
 
   async critique(input: CriticInput, signal: AbortSignal): Promise<string> {
     const key = geminiApiKey();
     if (!key) throw new CriticProviderError("GEMINI_API_KEY is not set");
-    const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(this.model)}:generateContent`;
+    let lastError: unknown;
+    for (const model of this.models) {
+      try {
+        return await this.critiqueWith(model, key, input, signal);
+      } catch (err) {
+        lastError = err;
+        if (!shouldFailOver(err) || signal.aborted) throw err;
+        console.warn(
+          `[critique] gemini model=${model} unavailable (${(err as CriticProviderError).status}); trying next model`,
+        );
+      }
+    }
+    throw lastError;
+  }
+
+  private async critiqueWith(model: string, key: string, input: CriticInput, signal: AbortSignal): Promise<string> {
+    const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
     const send = (withThinking: boolean) =>
       fetchJson(
         url,
         {
           method: "POST",
           headers: { "content-type": "application/json", "x-goog-api-key": key },
-          body: JSON.stringify(buildGeminiRequest(input, this.model, withThinking)),
+          body: JSON.stringify(buildGeminiRequest(input, model, withThinking)),
           signal,
         },
         "Gemini",
@@ -127,9 +152,9 @@ export class GeminiCriticProvider implements CriticProvider {
         err instanceof CriticProviderError &&
         err.status === 400 &&
         /think/i.test(err.message) &&
-        geminiThinkingConfig(this.model)
+        geminiThinkingConfig(model)
       ) {
-        thinkingUnsupported.add(this.model.toLowerCase());
+        thinkingUnsupported.add(model.toLowerCase());
         json = await send(false);
       } else {
         throw err;
@@ -143,7 +168,7 @@ export class GeminiCriticProvider implements CriticProvider {
     const base: BaronessReadiness = {
       ready: false,
       provider: this.id,
-      detail: { model: this.model, apiKeyConfigured: Boolean(key) },
+      detail: { model: this.model, fallbackModels: this.models.slice(1).join(",") || "none", apiKeyConfigured: Boolean(key) },
       problems: [],
     };
     if (!key) {

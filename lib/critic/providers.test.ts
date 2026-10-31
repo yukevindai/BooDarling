@@ -145,6 +145,48 @@ describe("gemini provider", () => {
     await assert.rejects(p.critique(INPUT, new AbortController().signal), (e: Error) => isTransientError(e));
   });
 
+  it("fails over to the next model when the primary is overloaded (503) or missing (404)", async () => {
+    process.env.GEMINI_API_KEY = "k";
+    stubFetch((c) => {
+      if (c.url.includes("/models/primary-model:")) return jsonRes({ error: { message: "high demand" } }, 503);
+      if (c.url.includes("/models/gone-model:")) return jsonRes({ error: { message: "not found" } }, 404);
+      return jsonRes({ candidates: [{ content: { parts: [{ text: "Lovely. Add gloves." }] } }] });
+    });
+    const p = new GeminiCriticProvider("primary-model", ["gone-model", "backup-model"]);
+    assert.deepEqual(p.models, ["primary-model", "gone-model", "backup-model"]);
+    assert.equal(await p.critique(INPUT, new AbortController().signal), "Lovely. Add gloves.");
+    assert.deepEqual(
+      calls.map((c) => c.url.match(/models\/([^:]+):/)?.[1]),
+      ["primary-model", "gone-model", "backup-model"],
+    );
+  });
+
+  it("does not fail over on non-overload errors and rethrows the last error when all models fail", async () => {
+    process.env.GEMINI_API_KEY = "k";
+    stubFetch(() => jsonRes({ error: { message: "API key not valid" } }, 400));
+    const p = new GeminiCriticProvider("a-model", ["b-model"]);
+    await assert.rejects(p.critique(INPUT, new AbortController().signal), (e: Error) => !isTransientError(e));
+    assert.equal(calls.length, 1);
+    calls.length = 0;
+    stubFetch(() => jsonRes({ error: { message: "high demand" } }, 503));
+    await assert.rejects(p.critique(INPUT, new AbortController().signal), (e: Error) => isTransientError(e));
+    assert.equal(calls.length, 2);
+  });
+
+  it("dedupes the primary from the fallback list and supports GEMINI_FALLBACK_MODELS=none", () => {
+    assert.deepEqual(new GeminiCriticProvider("x", ["x", "y"]).models, ["x", "y"]);
+    process.env.GEMINI_FALLBACK_MODELS = "none";
+    assert.deepEqual(new GeminiCriticProvider("x").models, ["x"]);
+    process.env.GEMINI_FALLBACK_MODELS = " m1 , m2 ";
+    assert.deepEqual(new GeminiCriticProvider("x").models, ["x", "m1", "m2"]);
+    delete process.env.GEMINI_FALLBACK_MODELS;
+    assert.deepEqual(new GeminiCriticProvider("gemini-flash-latest").models, [
+      "gemini-flash-latest",
+      "gemini-flash-lite-latest",
+      "gemini-2.5-flash",
+    ]);
+  });
+
   it("retries once without thinkingConfig when the model rejects it", async () => {
     process.env.GEMINI_API_KEY = "k";
     stubFetch((_c, n) =>
