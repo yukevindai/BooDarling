@@ -10,7 +10,6 @@ import { getPoseDetector } from "@/lib/capture/detector";
 import type { FramingState } from "@/lib/capture/types";
 import { ReflectCamera } from "@/components/reflect/ReflectCamera";
 import CaptureStub from "@/components/reflect/CaptureStub";
-import FaceDetectionOverlay from "@/components/reflect/FaceDetectionOverlay";
 import { isCritiqueDiscarded, requestCritique } from "@/components/baroness";
 import BooCamp from "@/components/boocamp/BooCamp";
 import NameEntry from "@/components/leaderboard/NameEntry";
@@ -256,15 +255,19 @@ export default function Mirror() {
   return (
     <main className="stage">
       {s.phase === "setup" && (
-        <div className="gate"><div>
-          <h1 className="title glitch" data-text="Boo, Darling!">Boo, Darling!</h1>
-          <p>Operator setup: allow the camera and enable sound. Visitors never touch the controls.</p>
-          <button className="btn" onClick={begin}>Open the dressing room</button>
-          <button className="link" onClick={() => { if (confirm("Clear the whole leaderboard?")) clearEntries(); }}>Clear leaderboard</button>
-          {cam.error && <p className="err">{cam.error}</p>}
-          {pose === "loading" && <p>Warming the pose model…</p>}
-          {pose === "error" && <p className="err">Pose model failed to load ({poseErr}). Timed capture will be used; reload to retry.</p>}
-        </div></div>
+        <div className="gate">
+          <div className="gate-inner">
+            <h1 className="title glitch" data-text="Boo, Darling!">Boo, Darling!</h1>
+            <p className="gate-note">Operator setup: allow the camera and enable sound. Visitors never touch the controls.</p>
+            <div className="gate-actions">
+              <button className="btn" onClick={begin}>Open the dressing room</button>
+              <button className="link" onClick={() => { if (confirm("Clear the whole leaderboard?")) clearEntries(); }}>Clear leaderboard</button>
+            </div>
+            {cam.error && <p className="err">{cam.error}</p>}
+            {pose === "loading" && <p className="gate-note">Warming the pose model…</p>}
+            {pose === "error" && <p className="err">Pose model failed to load ({poseErr}). Timed capture will be used; reload to retry.</p>}
+          </div>
+        </div>
       )}
 
       <header className="head">
@@ -289,7 +292,6 @@ export default function Mirror() {
           )}
           {live && <SilhouetteOverlay videoRef={cam.videoRef} active={live}
             onDescriptor={(descriptor) => { silhouette.current = descriptor; }} />}
-          {live && <FaceDetectionOverlay videoRef={cam.videoRef} active={live} />}
           {showShot && <img className="shot" alt="Your captured look" src={s.capture!.outfitImage} />}
           <div className={`fog ${fogged ? "on" : "off"}`} />
 
