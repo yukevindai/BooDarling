@@ -110,7 +110,10 @@ export function computeClothingBox(p: Pose, cfg: CaptureConfig = CAPTURE_CONFIG)
 
   const top = shoulderY - cfg.padTop * torsoH;
   const lowest = lowerYs.length ? Math.max(...lowerYs) : hipY;
-  const bottom = lowest + cfg.padBottom * torsoH;
+  let bottom = lowest + cfg.padBottom * torsoH;
+  // Upper-body mode: when the legs are out of view, keep every visible bit of clothing
+  // down to the bottom edge of the frame instead of stopping at an estimated hip line.
+  if (cfg.requireLowerBody === "none" && lowerYs.length === 0) bottom = Math.max(bottom, 1);
 
   return { x: left, y: top, w: right - left, h: bottom - top };
 }
@@ -150,8 +153,24 @@ export function evaluateFraming(poses: Pose[], cfg: CaptureConfig = CAPTURE_CONF
   if (sw > cfg.maxShoulderWidth) return out("tooClose");
   if (sw < cfg.minShoulderWidth) return out("tooFar");
 
+  if (!raw) return out("partial");
+  const m = cfg.edgeMargin;
+
+  if (cfg.requireLowerBody === "none") {
+    // Upper body is enough: both shoulders inside the frame and room above them for the collar.
+    const ls = main[LM.lShoulder], rs = main[LM.rShoulder];
+    const shouldersInside = [ls, rs].every((l) => l.x >= m && l.x <= 1 - m && l.y >= m && l.y <= 1 - m);
+    if (!shouldersInside) return out(sw > 0.5 ? "tooClose" : "offCenter");
+    if (raw.y < -m) return out("tooClose"); // collar cut off at the top
+    if (centerOffset !== null && Math.abs(centerOffset) > cfg.centerTolerance) return out("offCenter");
+    return out("settling"); // sides/bottom are clamped to the frame
+  }
+
   const hipsSeen = seen(main, LM.lHip, cfg) || seen(main, LM.rHip, cfg);
-  const lowerIdx = cfg.requireLowerBody === "ankles" ? [LM.lAnkle, LM.rAnkle] : [LM.lKnee, LM.rKnee];
+  const lowerIdx =
+    cfg.requireLowerBody === "ankles" ? [LM.lAnkle, LM.rAnkle]
+    : cfg.requireLowerBody === "hips" ? [LM.lHip, LM.rHip]
+    : [LM.lKnee, LM.rKnee];
   const lowerSeen =
     lowerIdx.some((i) => seen(main, i, cfg)) ||
     // Floor-length gown: knees hidden by fabric but located inside the frame.
@@ -159,10 +178,8 @@ export function evaluateFraming(poses: Pose[], cfg: CaptureConfig = CAPTURE_CONF
   // Lower body missing almost always means the camera can't fit them: step back.
   if (!hipsSeen || !lowerSeen) return out(hipsSeen ? "tooClose" : "partial");
 
-  if (!raw) return out("partial");
   if (centerOffset !== null && Math.abs(centerOffset) > cfg.centerTolerance) return out("offCenter");
 
-  const m = cfg.edgeMargin;
   const clipsVertically = raw.y < -m || raw.y + raw.h > 1 + m;
   const clipsSides = raw.x < -m || raw.x + raw.w > 1 + m;
   if (clipsVertically) return out("tooClose");

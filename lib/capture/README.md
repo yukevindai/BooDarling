@@ -61,7 +61,7 @@ Imports use the `@/` alias (default in create-next-app). Both component files ar
 
 ## Crop policy (keep identical for references)
 
-Box from shoulders, elbows, wrists, hips, knees, ankles/feet. Top sits just above the shoulders (collar, not face); sides padded 0.55× shoulder width and at least 2.1× shoulder width total (coat flare); bottom 0.15× torso below the lowest visible lower-body point. Requires knees in frame (`requireLowerBody`). No stretching; long side ≤ 768 px. Background is still included — we make no background-invariance claim.
+Box from shoulders, elbows, wrists, hips, knees, ankles/feet. Top sits just above the shoulders (collar, not face); sides padded 0.55× shoulder width and at least 2.1× shoulder width total (coat flare); bottom 0.15× torso below the lowest visible lower-body point. Default `requireLowerBody: "none"`: shoulders in frame are enough (upper-body webcam framing); when the legs are out of view the crop runs to the bottom of the frame. `"hips" | "knees" | "ankles"` give stricter full-length framing; in `"knees"` mode, knees hidden under a gown but located in frame still count. No stretching; long side ≤ 768 px. Background is still included — we make no background-invariance claim.
 
 ## Tuning on the demo setup
 

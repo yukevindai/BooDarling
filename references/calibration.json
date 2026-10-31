@@ -1,7 +1,7 @@
 {
   "calibrationVersion": "cruella-cal-v1",
   "modelVersion": "fashion-clip",
-  "referenceVersion": "cruella-ref-v2",
+  "referenceVersion": "cruella-ref-v3",
   "lowAnchor": 0.18,
   "highAnchor": 0.34,
   "anchors": {
