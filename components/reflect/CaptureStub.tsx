@@ -1,5 +1,7 @@
 "use client";
-// R2 REPLACES THIS with real detection/framing/auto-crop (components/reflect/, lib/capture/).
+// DEGRADED-MODE FALLBACK ONLY. The real capture is R2's ReflectCamera; Mirror renders this
+// only when the MediaPipe pose model fails to load (e.g. CDN blocked), so a session started by
+// voice or the "reveal" link still ends in a (fixed centre-crop) capture instead of stalling.
 // Contract: call onCountdown(n) when stable framing begins, onReadyCapture(capture) ONCE per session.
 import { useEffect, useRef, useState } from "react";
 import type { Capture } from "@/lib/types";

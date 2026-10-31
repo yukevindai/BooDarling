@@ -3,12 +3,26 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useCamera } from "@/lib/camera";
 import { initialState, reducer, verdictWord } from "@/lib/session";
-import type { Capture, CritiqueResponse, RateResult } from "@/lib/types";
+import type { Phase } from "@/lib/session";
+import { lookLabel, presenceAction, referenceImageUrl } from "@/lib/mirror";
+import type { Capture, RateResult } from "@/lib/types";
+import { getPoseDetector } from "@/lib/capture/detector";
+import type { FramingState } from "@/lib/capture/types";
+import { ReflectCamera } from "@/components/reflect/ReflectCamera";
 import CaptureStub from "@/components/reflect/CaptureStub";
+import { isCritiqueDiscarded, requestCritique } from "@/components/baroness";
 
 const PHRASE_OK = (t: string) => /mirror/.test(t) && /fairest/.test(t);
 const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
-const AUTO_RESET_MS = 45000;
+/** Safety net if R2 presence never reports departure while results are showing. */
+const RESULTS_TIMEOUT_MS = 120000;
+/** Without pose detection (fallback capture) nothing reports departure, so return sooner. */
+const RESULTS_TIMEOUT_FALLBACK_MS = 45000;
+/** A session started by voice/link with nobody in frame is abandoned after this long. */
+const EMPTY_FRAMING_TIMEOUT_MS = 20000;
+
+type PoseStatus = "idle" | "loading" | "ready" | "error";
+type Guide = { message: string | null; progress: number };
 
 function useTypewriter(text: string | undefined, ms = 32) {
   const [out, setOut] = useState("");
@@ -20,16 +34,27 @@ function useTypewriter(text: string | undefined, ms = 32) {
   return out;
 }
 
+const errText = (e: unknown) =>
+  e instanceof Error ? e.message
+  : typeof Event !== "undefined" && e instanceof Event ? `${e.type} while loading model files (CDN unreachable?)`
+  : String(e);
+
 export default function Mirror() {
   const [s, dispatch] = useReducer(reducer, initialState);
   const cam = useCamera();
   const sid = useRef(""); sid.current = s.sessionId;
+  // Updated eagerly by reveal/reset so two triggers in the same tick can't double-start.
+  const phase = useRef<Phase>(s.phase); phase.current = s.phase;
+  const present = useRef(false);
   const ctrl = useRef<AbortController | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
   const [heard, setHeard] = useState("");
   const [listening, setListening] = useState(false);
   const [burst, setBurst] = useState(false);
   const [canSR, setCanSR] = useState(false);
+  const [pose, setPose] = useState<PoseStatus>("idle");
+  const [poseErr, setPoseErr] = useState<string | null>(null);
+  const [guide, setGuide] = useState<Guide>({ message: null, progress: 0 });
   const recRef = useRef<any>(null);
 
   // random glitch jolts on the whole frame
@@ -50,17 +75,26 @@ export default function Mirror() {
     } catch { /* text stays visible */ }
   }, []);
 
+  // Start a session. Triggers: R2 presence (hands-free), the spoken phrase, or the fallback link.
   const reveal = useCallback(() => {
+    if (phase.current !== "waiting") return;
+    phase.current = "framing";
     recRef.current?.stop(); setListening(false);
     ctrl.current?.abort(); ctrl.current = new AbortController();
+    setGuide({ message: null, progress: 0 });
     const id = crypto.randomUUID();
     dispatch({ type: "reveal", sessionId: id });
     speak("Well, well. Let's see what we're working with, darling.", id);
   }, [speak]);
 
   const reset = useCallback(() => {
-    ctrl.current?.abort(); stopAudio(); setHeard(""); dispatch({ type: "reset" });
+    phase.current = "waiting";
+    ctrl.current?.abort(); stopAudio(); setHeard(""); setGuide({ message: null, progress: 0 });
+    dispatch({ type: "reset" });
   }, []);
+
+  // Results button: start over straight away if the visitor is still standing there.
+  const again = useCallback(() => { reset(); if (present.current) reveal(); }, [reset, reveal]);
 
   const listen = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -76,12 +110,20 @@ export default function Mirror() {
 
   const begin = async () => {
     new Audio(SILENT).play().catch(() => {}); // unlock browser audio via user gesture
-    await cam.start(); dispatch({ type: "start" });
+    // Warm the pose model while the camera prompt is up (spec §3). Not awaited: the mirror opens
+    // as soon as the camera runs; ReflectCamera picks up the same cached detector.
+    if (pose === "idle" || pose === "error") {
+      setPose("loading"); setPoseErr(null);
+      getPoseDetector().then(() => setPose("ready"), (e) => { setPose("error"); setPoseErr(errText(e)); });
+    }
+    if (await cam.start()) dispatch({ type: "start" });
   };
 
   // pipeline: capture -> rate -> critique -> speak
   const onReadyCapture = useCallback(async (capture: Capture) => {
-    const id = capture.sessionId; dispatch({ type: "captured", capture });
+    const id = capture.sessionId;
+    if (sid.current !== id) return; // late capture from a session that already ended
+    dispatch({ type: "captured", capture });
     const signal = ctrl.current?.signal;
     const post = async <T,>(url: string, body: unknown): Promise<T> => {
       const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
@@ -94,24 +136,53 @@ export default function Mirror() {
       if (sid.current !== id) return;
       dispatch({ type: "rated", result });
       if (result.status !== "ok") return;
-      const c = await post<CritiqueResponse>("/api/critique", { capture, result }).catch(() => null);
+      // Bounded wait; on timeout/failure R4's client falls back to the preset line for this score band.
+      let text: string;
+      try { text = (await requestCritique(capture, result, { signal })).text; }
+      catch (e) { if (isCritiqueDiscarded(e)) return; throw e; } // visitor left / stale: show nothing
       if (sid.current !== id) return;
-      const text = c?.text ?? "Hm. I have nothing kind to say, and I never lie.";
       dispatch({ type: "critique", text }); speak(text, id);
     } catch { /* aborted on departure */ }
   }, [speak]);
 
-  // auto-return after a while (stands in for R2 departure detection)
+  // R2 presence (debounced): arrival while waiting starts a session, departure ends it (spec §2).
+  const onPresenceChange = useCallback((p: boolean) => {
+    present.current = p;
+    const action = presenceAction(phase.current, p);
+    if (action === "reveal") reveal();
+    else if (action === "reset") reset();
+  }, [reveal, reset]);
+
+  const onFramingChange = useCallback((f: FramingState) => {
+    if (f.status === "capturing" && phase.current === "framing") dispatch({ type: "countdown" });
+    const progress = Math.round(f.progress * 50) / 50; // ~12 updates/s otherwise
+    setGuide((g) => (g.message === f.message && g.progress === progress ? g : { message: f.message, progress }));
+  }, []);
+
+  const onPoseReady = useCallback(() => setPose("ready"), []);
+  const onPoseError = useCallback((e: unknown) => { setPose("error"); setPoseErr(errText(e)); }, []);
+
+  // Safety net: leave results even if departure is never reported.
+  const fallback = pose === "error";
   useEffect(() => {
     if (s.phase !== "results") return;
-    const t = setTimeout(reset, AUTO_RESET_MS); return () => clearTimeout(t);
-  }, [s.phase, reset]);
+    const t = setTimeout(reset, fallback ? RESULTS_TIMEOUT_FALLBACK_MS : RESULTS_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [s.phase, reset, fallback]);
+
+  // Started by voice/link but nobody ever stepped into frame: go back to waiting.
+  useEffect(() => {
+    if (s.phase !== "framing" || fallback) return;
+    const t = setTimeout(() => { if (!present.current) reset(); }, EMPTY_FRAMING_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [s.phase, s.sessionId, reset, fallback]);
 
   const typed = useTypewriter(s.critique);
   const ok = s.result?.status === "ok" ? s.result : null;
   const live = s.phase === "framing" || s.phase === "capturing";
   const fogged = s.phase === "setup" || s.phase === "waiting" || s.phase === "analysing";
   const showShot = (s.phase === "analysing" || s.phase === "results") && s.capture;
+  const cameraOn = s.phase !== "setup";
 
   return (
     <main className="stage">
@@ -121,6 +192,8 @@ export default function Mirror() {
           <p>Operator setup: allow the camera and enable sound. Visitors never touch the controls.</p>
           <button className="btn" onClick={begin}>Open the dressing room</button>
           {cam.error && <p className="err">{cam.error}</p>}
+          {pose === "loading" && <p>Warming the pose model…</p>}
+          {pose === "error" && <p className="err">Pose model failed to load ({poseErr}). Timed capture will be used; reload to retry.</p>}
         </div></div>
       )}
 
@@ -131,7 +204,17 @@ export default function Mirror() {
 
       <section className={`frame ${burst ? "burst" : ""}`} aria-label="The haunted mirror">
         <div className={`glass creepy ${fogged ? "" : "clear"} ${s.phase === "analysing" ? "deep" : ""} ${s.phase === "results" ? "dark" : ""}`}>
+          {/* visibility:hidden (never display:none) so the stream keeps decoding frames for R2's detector. */}
           <video ref={cam.videoRef} muted playsInline style={{ visibility: live || s.phase === "waiting" ? "visible" : "hidden" }} />
+          {/* R2 runs whenever the camera is on (presence in waiting/results). Armed from framing until the
+              capture lands (framing → capturing keeps the same id, so no re-arm); null disarms.
+              mirrored: `.glass video` is scaleX(-1) in globals.css. Guidance is drawn below in R1's style. */}
+          {cameraOn && !fallback && (
+            <ReflectCamera videoRef={cam.videoRef} sessionId={live ? s.sessionId : null}
+              mirrored={true} showGuidance={false}
+              onReadyCapture={onReadyCapture} onPresenceChange={onPresenceChange} onFramingChange={onFramingChange}
+              onReady={onPoseReady} onError={onPoseError} />
+          )}
           {showShot && <img className="shot" alt="Your captured look" src={s.capture!.outfitImage} />}
           <div className={`fog ${fogged ? "on" : "off"}`} />
 
@@ -144,18 +227,26 @@ export default function Mirror() {
               <button className="link" onClick={reveal}>Or reveal the mirror</button>
             </div>
           )}
+          {s.phase === "waiting" && fallback && <p className="opnote">Pose model unavailable: timed capture. Reload to retry.</p>}
 
-          {live && <div className="line">{s.line}</div>}
-          <CaptureStub videoRef={cam.videoRef} active={live} sessionId={s.sessionId}
-            onCountdown={() => dispatch({ type: "countdown" })} onReadyCapture={onReadyCapture} />
+          {/* One caption: R2's framing guidance when it has something to say, else the Baroness's line. */}
+          {live && <div className="line guide">{guide.message ?? s.line}</div>}
+          {live && !fallback && guide.progress > 0 && (
+            <div className="progress" aria-hidden><span style={{ width: `${guide.progress * 100}%` }} /></div>
+          )}
+          {/* Degraded mode only: pose model failed to load, so fall back to a timed centre crop. */}
+          {fallback && (
+            <CaptureStub videoRef={cam.videoRef} active={s.phase === "framing" || s.phase === "capturing"} sessionId={s.sessionId}
+              onCountdown={() => dispatch({ type: "countdown" })} onReadyCapture={onReadyCapture} />
+          )}
 
           {s.phase === "analysing" && (<><div className="scan" /><div className="line glitch" data-text={s.line}>{s.line}</div></>)}
 
           {s.phase === "results" && (
             <>
               {ok && <>
-                <span className="refcap">Closest look: {ok.lookId}</span>
-                <img className="ref" alt="Closest reference" src={`/references/cruella/${ok.lookId}/${ok.referenceId}.jpg`}
+                <span className="refcap">Closest look: {lookLabel(ok.lookId)}</span>
+                <img className="ref" alt="Closest reference" src={referenceImageUrl(ok.referenceId)}
                   onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")} />
               </>}
               <div className="verdict">
@@ -164,7 +255,7 @@ export default function Mirror() {
                   <p className="adj">{verdictWord(ok.aura)}</p>
                   <p className="crit">{typed}</p>
                 </>) : <p className="crit">{s.result && s.result.status === "unavailable" ? s.result.message : "Unable to rate this look"}</p>}
-                <button className="btn" onClick={reset}>FACE THE MIRROR AGAIN</button>
+                <button className="btn" onClick={again}>FACE THE MIRROR AGAIN</button>
               </div>
             </>
           )}

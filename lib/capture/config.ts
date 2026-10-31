@@ -8,8 +8,13 @@ export const CAPTURE_CONFIG = {
   /** Lite is fast enough on a laptop; switch to "full" if landmarks jitter. */
   modelUrl:
     "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-  /** Copy node_modules/@mediapipe/tasks-vision/wasm to public/mediapipe/wasm for offline demos. */
-  wasmUrl: "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0/wasm",
+  /**
+   * Same-origin copy of node_modules/@mediapipe/tasks-vision/wasm, made by
+   * scripts/copy-mediapipe-wasm.mjs before `npm run dev` / `npm run build`, so a
+   * network that blocks cdn.jsdelivr.net can't stop pose detection.
+   * Override with NEXT_PUBLIC_MEDIAPIPE_WASM_BASE (e.g. the jsdelivr URL for @1.2.0).
+   */
+  wasmUrl: process.env.NEXT_PUBLIC_MEDIAPIPE_WASM_BASE || "/mediapipe/wasm",
   /** Detect 2 so we can notice a second visitor and pause (spec §2). */
   numPoses: 2,
   minPoseDetectionConfidence: 0.5,
@@ -40,6 +45,13 @@ export const CAPTURE_CONFIG = {
   centerTolerance: 0.2,
   /** Need at least the knees in frame: Cruella's coat hem matters. */
   requireLowerBody: "knees" as "knees" | "ankles",
+  /**
+   * Floor-length gowns hide the knees, so MediaPipe reports them with low
+   * visibility (≈0.1–0.2 on the reference gown) while still locating them.
+   * A knee counts as "covered but in frame" at or above this visibility when its
+   * position lies inside the frame (bottom edge margin applies).
+   */
+  coveredKneeMinVisibility: 0.08,
   /** Crop box touching a frame edge closer than this means something is clipped. */
   edgeMargin: 0.04,
 

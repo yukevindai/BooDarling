@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/copy-mediapipe-wasm.mjs",
+    "predev": "node scripts/copy-mediapipe-wasm.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-mediapipe-wasm.mjs",
     "build": "next build",
     "start": "next start"
   },

@@ -1,6 +1,6 @@
 {
   "characterId": "cruella",
-  "referenceVersion": "cruella-ref-v1",
+  "referenceVersion": "cruella-ref-v2",
   "framingPolicy": {
     "focus": "clothing",
     "preserveAspectRatio": true,
@@ -10,42 +10,55 @@
     {
       "lookId": "red-glamour",
       "characterId": "cruella",
-      "description": "Cruella's crimson statement gown — dramatic red silhouette with ivory trim and black two-tone accents. One specific look for the MVP (spec §3).",
+      "description": "Cruella's crimson ball gown: crinkled red satin halter gown with a high gathered neck, sweetheart bodice, fitted mermaid silhouette flaring to a pleated train with a thigh-high slit over a nude underlayer; long crimson opera gloves; slim black cane. Styling: split black-and-white hair, dark smoky eyes, red lip.",
       "references": [
         {
           "referenceId": "red-glamour-01",
-          "image": "public/references/cruella/red-glamour/01.png",
-          "sourceUrl": "PLACEHOLDER — replace with the curated image source URL before the demo",
-          "description": "Full-length crimson gown, front view.",
+          "image": "public/references/cruella/red-glamour/01.jpg",
+          "sourceUrl": "Team-provided reference still (Cruella, 2021). Source URL to be added; third-party image, not covered by the repo licence.",
+          "description": "Clothing crop, collar to knees, matching the live capture framing: halter neck, bodice, gloves, fitted silhouette.",
           "crop": {
             "applied": true,
             "region": "clothing",
-            "note": "Placeholder asset generated for pipeline bring-up. Swap with a curated, clothing-cropped photo; keep aspect ratio."
+            "box": {
+              "x": 20,
+              "y": 122,
+              "w": 420,
+              "h": 378
+            },
+            "note": "Cropped from one team-provided photo. Additional distinct photos of this look would improve robustness (spec §3 asks for three distinct images)."
           }
         },
         {
           "referenceId": "red-glamour-02",
-          "image": "public/references/cruella/red-glamour/02.png",
-          "sourceUrl": "PLACEHOLDER — replace with the curated image source URL before the demo",
-          "description": "Two-tone bodice with red sash, three-quarter view.",
+          "image": "public/references/cruella/red-glamour/02.jpg",
+          "sourceUrl": "Team-provided reference still (Cruella, 2021). Source URL to be added; third-party image, not covered by the repo licence.",
+          "description": "Collar to hem: full gown silhouette including the mermaid flare, slit and train, gloves and cane.",
           "crop": {
             "applied": true,
             "region": "clothing",
-            "note": "Placeholder asset generated for pipeline bring-up. Swap with a curated, clothing-cropped photo; keep aspect ratio."
+            "box": {
+              "x": 0,
+              "y": 122,
+              "w": 454,
+              "h": 553
+            },
+            "note": "Cropped from one team-provided photo. Additional distinct photos of this look would improve robustness (spec §3 asks for three distinct images)."
           }
         },
         {
           "referenceId": "red-glamour-03",
-          "image": "public/references/cruella/red-glamour/03.png",
-          "sourceUrl": "PLACEHOLDER — replace with the curated image source URL before the demo",
-          "description": "Red ensemble with black-and-ivory detailing, detail view.",
+          "image": "public/references/cruella/red-glamour/03.jpg",
+          "sourceUrl": "Team-provided reference still (Cruella, 2021). Source URL to be added; third-party image, not covered by the repo licence.",
+          "description": "Full look head to hem, including the split black-and-white hair and makeup.",
           "crop": {
-            "applied": true,
-            "region": "clothing",
-            "note": "Placeholder asset generated for pipeline bring-up. Swap with a curated, clothing-cropped photo; keep aspect ratio."
+            "applied": false,
+            "region": "full",
+            "note": "Cropped from one team-provided photo. Additional distinct photos of this look would improve robustness (spec §3 asks for three distinct images)."
           }
         }
-      ]
+      ],
+      "label": "Red Glamour"
     }
   ]
 }

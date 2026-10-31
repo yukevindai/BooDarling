@@ -22,7 +22,9 @@ import base64
 import binascii
 import hmac
 import io
+import json
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
@@ -31,7 +33,9 @@ from fastapi.responses import JSONResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 
+from calibration_tools import is_placeholder_calibration
 from refstore import (
+    calibration_path,
     load_calibration,
     load_embeddings,
     load_manifest,
@@ -65,6 +69,26 @@ class _State:
 STATE = _State()
 
 
+def _warn_if_placeholder_calibration() -> None:
+    """Tell the operator when the shipped placeholder anchors are still in use."""
+    try:
+        with calibration_path().open("r", encoding="utf-8") as fh:
+            raw = json.load(fh)
+        if is_placeholder_calibration(raw):
+            print(
+                "[similarity] WARNING: calibration.json still has the shipped PLACEHOLDER "
+                f"anchors (low={raw.get('lowAnchor')}, high={raw.get('highAnchor')}); most "
+                "photos will score 100. Run services/similarity/calibrate.py (see README)."
+            )
+    except (OSError, ValueError):
+        pass  # unreadable calibration is already reported by _warm
+
+
+def _log_name(value: str, limit: int) -> str:
+    """Short, single-line, printable form of a client-supplied id for the log."""
+    return "".join(c if c.isprintable() and not c.isspace() else "?" for c in value[:limit])
+
+
 def _warm() -> None:
     """Load manifest, calibration, embedding cache, and the encoder. Set readiness.
 
@@ -75,6 +99,7 @@ def _warm() -> None:
         manifest = load_manifest()
         reference_version = str(manifest.get("referenceVersion", ""))
         calibration = load_calibration()
+        _warn_if_placeholder_calibration()
         cache = load_embeddings()
         embeddings = cache["embeddings"]
         looks = looks_with_embeddings(manifest, embeddings)
@@ -214,6 +239,8 @@ def rate(capture: Capture) -> JSONResponse:
             status_code=503,
         )
 
+    started = time.perf_counter()
+
     # Decode + encode. A decode/encode failure is an embedding failure: never
     # fabricate a score (spec §5) — return 'unavailable'.
     try:
@@ -237,6 +264,16 @@ def rate(capture: Capture) -> JSONResponse:
     except Exception as exc:  # noqa: BLE001
         print(f"[similarity] scoring failed: {exc}")
         return _unavailable(capture.sessionId, "Unable to rate this look.")
+
+    # One concise line per request so the operator can read real similarities while
+    # calibrating (calibrate.py --low/--high). Never log image data.
+    print(
+        f"[similarity] rate session={_log_name(capture.sessionId, 12)} look={winner.lookId} "
+        f"sim={winner.lookSimilarity:.4f} ref={winner.bestReferenceId} aura={aura} "
+        f"cal={STATE.calibration.calibrationVersion} "
+        f"ms={(time.perf_counter() - started) * 1000:.0f}",
+        flush=True,
+    )
 
     return JSONResponse(
         status_code=200,

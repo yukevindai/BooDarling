@@ -38,6 +38,22 @@ export const GUIDANCE: Record<FramingStatus, string | null> = {
 const vis = (p: Pose, i: number) => p[i]?.visibility ?? 0;
 const seen = (p: Pose, i: number, cfg: CaptureConfig) => !!p[i] && vis(p, i) >= cfg.minVisibility;
 
+/**
+ * A knee hidden under a long skirt/gown: low visibility but located inside the frame.
+ * Only knees use this (not ankles/feet), so a gown's hem at the floor never pushes
+ * the crop off the bottom edge.
+ */
+export const coveredKneeInFrame = (p: Pose, i: number, cfg: CaptureConfig) => {
+  const l = p[i];
+  return (
+    !!l &&
+    vis(p, i) >= cfg.coveredKneeMinVisibility &&
+    l.x >= 0 && l.x <= 1 &&
+    l.y >= 0 && l.y <= 1 - cfg.edgeMargin
+  );
+};
+const KNEES = [LM.lKnee, LM.rKnee];
+
 export function shoulderWidth(p: Pose): number {
   return Math.abs((p[LM.lShoulder]?.x ?? 0) - (p[LM.rShoulder]?.x ?? 0));
 }
@@ -79,6 +95,10 @@ export function computeClothingBox(p: Pose, cfg: CaptureConfig = CAPTURE_CONFIG)
     .filter((i) => i === LM.lShoulder || i === LM.rShoulder || seen(p, i, cfg))
     .map((i) => p[i].x);
   const lowerYs = LOWER_POINTS.filter((i) => seen(p, i, cfg)).map((i) => p[i].y);
+  // Gowns: knees hidden under fabric still bound the crop (collar → knees, like the live policy).
+  if (hipsSeen) {
+    for (const i of KNEES) if (!seen(p, i, cfg) && coveredKneeInFrame(p, i, cfg)) lowerYs.push(p[i].y);
+  }
 
   const centerX = hipsSeen
     ? (ls.x + rs.x + (p[LM.lHip]?.x ?? ls.x) + (p[LM.rHip]?.x ?? rs.x)) / 4
@@ -132,7 +152,10 @@ export function evaluateFraming(poses: Pose[], cfg: CaptureConfig = CAPTURE_CONF
 
   const hipsSeen = seen(main, LM.lHip, cfg) || seen(main, LM.rHip, cfg);
   const lowerIdx = cfg.requireLowerBody === "ankles" ? [LM.lAnkle, LM.rAnkle] : [LM.lKnee, LM.rKnee];
-  const lowerSeen = lowerIdx.some((i) => seen(main, i, cfg));
+  const lowerSeen =
+    lowerIdx.some((i) => seen(main, i, cfg)) ||
+    // Floor-length gown: knees hidden by fabric but located inside the frame.
+    (cfg.requireLowerBody === "knees" && KNEES.some((i) => coveredKneeInFrame(main, i, cfg)));
   // Lower body missing almost always means the camera can't fit them: step back.
   if (!hipsSeen || !lowerSeen) return out(hipsSeen ? "tooClose" : "partial");
 

@@ -12,3 +12,5 @@ services/similarity/cache/
 *.safetensors
 *.onnx
 visitor-photos/
+# copied from node_modules at dev/build time (scripts/copy-mediapipe-wasm.mjs)
+public/mediapipe/
