@@ -36,6 +36,8 @@ export function getFaceDetector(): Promise<FaceLandmarker> {
 }
 
 let lastTs = 0;
+export type FaceBox = { x: number; y: number; width: number; height: number };
+
 /** Blendshapes for the first face, or null if no face is tracked this frame. */
 export function readBlendshapes(detector: FaceLandmarker, video: HTMLVideoElement): Blendshapes | null {
   if (video.readyState < 2 || !video.videoWidth) return null;
@@ -45,4 +47,25 @@ export function readBlendshapes(detector: FaceLandmarker, video: HTMLVideoElemen
   const cats = res.faceBlendshapes?.[0]?.categories;
   if (!cats?.length) return null;
   return Object.fromEntries(cats.map((c) => [c.categoryName, c.score]));
+}
+
+/** Normalized face bounds for the first tracked face, or null when no face is found. */
+export function readFaceBox(detector: FaceLandmarker, video: HTMLVideoElement): FaceBox | null {
+  if (video.readyState < 2 || !video.videoWidth) return null;
+  const ts = Math.max(performance.now(), lastTs + 1);
+  lastTs = ts;
+  const landmarks = detector.detectForVideo(video, ts).faceLandmarks?.[0];
+  if (!landmarks?.length) return null;
+
+  let minX = 1;
+  let minY = 1;
+  let maxX = 0;
+  let maxY = 0;
+  for (const point of landmarks) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }

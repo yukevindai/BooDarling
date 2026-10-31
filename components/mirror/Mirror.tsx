@@ -294,20 +294,25 @@ export default function Mirror() {
   return (
     <main className="stage">
       {s.phase === "setup" && (
-        <div className="gate"><div>
-          <h1 className="title glitch" data-text="Boo, Darling!">Boo, Darling!</h1>
-          <p>Operator setup: allow the camera and enable sound. Visitors never touch the controls.</p>
-          <button className="btn" onClick={begin}>Open the dressing room</button>
-          <button className="link" onClick={() => { if (confirm("Clear the whole leaderboard?")) clearEntries(); }}>Clear leaderboard</button>
-          {cam.error && <p className="err">{cam.error}</p>}
-          {pose === "loading" && <p>Warming the pose model…</p>}
-          {pose === "error" && <p className="err">Pose model failed to load ({poseErr}). Timed capture will be used; reload to retry.</p>}
-        </div></div>
+        <div className="gate">
+          <div className="gate-inner">
+            <h1 className="title glitch" data-text="Boo, Darling!">Boo, Darling!</h1>
+            <p className="gate-note">Operator setup: allow the camera and enable sound. Visitors never touch the controls.</p>
+            <div className="gate-actions">
+              <button className="btn" onClick={begin}>Open the dressing room</button>
+              <button className="link" onClick={() => { if (confirm("Clear the whole leaderboard?")) clearEntries(); }}>Clear leaderboard</button>
+            </div>
+            {cam.error && <p className="err">{cam.error}</p>}
+            {pose === "loading" && <p className="gate-note">Warming the pose model…</p>}
+            {pose === "error" && <p className="err">Pose model failed to load ({poseErr}). Timed capture will be used; reload to retry.</p>}
+          </div>
+        </div>
       )}
 
       <header className="head">
         <h1 className="title glitch" data-text="Boo, Darling!">Boo, Darling!</h1>
-        <p className="tag">Mirror, mirror on the wall… who’s the fairest — or the scariest — of them all?<br /><b>Let the Baroness judge you.</b></p>
+        <p className="tag">Mirror, mirror on the wall… who’s the fairest — or the scariest — of them all?</p>
+        <p className="tag tag2">Let the Baroness judge you.</p>
       </header>
       <LeaderboardRibbon />
 
