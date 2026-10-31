@@ -18,6 +18,7 @@ import { getFaceDetector } from "@/lib/expressions/faceDetector";
 import { addEntry, clearEntries } from "@/lib/leaderboard/store";
 import { scareVerdict } from "@/lib/expressions/scare";
 import SilhouetteOverlay from "@/components/silhouette/SilhouetteOverlay";
+import FaceDetectionOverlay from "@/components/reflect/FaceDetectionOverlay";
 
 const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 /** Safety net if R2 presence never reports departure while results are showing. */
@@ -332,6 +333,7 @@ export default function Mirror() {
           )}
           {live && <SilhouetteOverlay videoRef={cam.videoRef} active={live}
             onDescriptor={(descriptor) => { silhouette.current = descriptor; }} />}
+          {(live || scaring) && <FaceDetectionOverlay videoRef={cam.videoRef} active={live || scaring} />}
           {showShot && <img className="shot" alt="Your captured look" src={s.capture!.outfitImage} />}
           <div className={`fog ${fogged ? "on" : "off"}`} />
 
