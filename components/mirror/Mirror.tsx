@@ -10,6 +10,7 @@ import { getPoseDetector } from "@/lib/capture/detector";
 import type { FramingState } from "@/lib/capture/types";
 import { ReflectCamera } from "@/components/reflect/ReflectCamera";
 import CaptureStub from "@/components/reflect/CaptureStub";
+import FaceDetectionOverlay from "@/components/reflect/FaceDetectionOverlay";
 import { isCritiqueDiscarded, requestCritique } from "@/components/baroness";
 import BooCamp from "@/components/boocamp/BooCamp";
 import NameEntry from "@/components/leaderboard/NameEntry";
@@ -287,6 +288,7 @@ export default function Mirror() {
           )}
           {live && <SilhouetteOverlay videoRef={cam.videoRef} active={live}
             onDescriptor={(descriptor) => { silhouette.current = descriptor; }} />}
+          {live && <FaceDetectionOverlay videoRef={cam.videoRef} active={live} />}
           {showShot && <img className="shot" alt="Your captured look" src={s.capture!.outfitImage} />}
           <div className={`fog ${fogged ? "on" : "off"}`} />
 
