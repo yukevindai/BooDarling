@@ -18,7 +18,6 @@ import { getFaceDetector } from "@/lib/expressions/faceDetector";
 import { addEntry, clearEntries } from "@/lib/leaderboard/store";
 import { scareVerdict } from "@/lib/expressions/scare";
 import SilhouetteOverlay from "@/components/silhouette/SilhouetteOverlay";
-import FaceDetectionOverlay from "@/components/reflect/FaceDetectionOverlay";
 
 const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 /** Safety net if R2 presence never reports departure while results are showing. */
@@ -75,6 +74,8 @@ export default function Mirror() {
   const [poseErr, setPoseErr] = useState<string | null>(null);
   const [guide, setGuide] = useState<Guide>({ message: null, progress: 0 });
   const recRef = useRef<any>(null);
+  const music = useRef<HTMLAudioElement | null>(null);
+  const [muted, setMuted] = useState(false);
   const [step, setStep] = useState<Step>("verdict");
   const stepRef = useRef<Step>("verdict"); stepRef.current = step;
   const [entryId, setEntryId] = useState<string | undefined>();
@@ -99,8 +100,14 @@ export default function Mirror() {
       if (!r.ok || sid.current !== id || gen !== speechGen.current) return;
       const blob = await r.blob();
       if (sid.current !== id || gen !== speechGen.current) return;
-      const a = new Audio(URL.createObjectURL(blob)); audio.current = a; await a.play();
-    } catch { /* text stays visible */ }
+      const a = new Audio(URL.createObjectURL(blob)); audio.current = a;
+      const restore = () => { if (music.current) music.current.volume = 0.25; };
+      if (music.current) music.current.volume = 0.08;
+      a.onended = restore;
+      await a.play();
+    } catch {
+      if (music.current) music.current.volume = 0.25; // speech failed: bring the music back up
+    }
   }, []);
 
   // Start a session. Triggers: the spoken phrase (always listening while waiting) — "fairest" judges the
@@ -163,6 +170,12 @@ export default function Mirror() {
 
   const begin = async () => {
     new Audio(SILENT).play().catch(() => {}); // unlock browser audio via user gesture
+    if (!music.current) {
+      const m = new Audio("/audio/ambient.mp3");
+      m.loop = true; m.volume = 0.25;
+      music.current = m;
+    }
+    music.current.play().catch(() => {});
     // Ask for the microphone now (operator setup) so the always-on phrase listener never prompts a visitor.
     navigator.mediaDevices?.getUserMedia?.({ audio: true })
       .then((st) => st.getTracks().forEach((t) => t.stop()))
@@ -310,6 +323,11 @@ export default function Mirror() {
         </div>
       )}
 
+      <button className="mute" aria-label={muted ? "Unmute music" : "Mute music"}
+        onClick={() => { const m = music.current; if (m) { m.muted = !muted; } setMuted(!muted); }}>
+        {muted ? "🔇" : "🔊"}
+      </button>
+      
       <header className="head">
         <h1 className="title glitch" data-text="Boo, Darling!">Boo, Darling!</h1>
         <p></p>
@@ -333,7 +351,6 @@ export default function Mirror() {
           )}
           {live && <SilhouetteOverlay videoRef={cam.videoRef} active={live}
             onDescriptor={(descriptor) => { silhouette.current = descriptor; }} />}
-          {(live || scaring) && <FaceDetectionOverlay videoRef={cam.videoRef} active={live || scaring} />}
           {showShot && <img className="shot" alt="Your captured look" src={s.capture!.outfitImage} />}
           <div className={`fog ${fogged ? "on" : "off"}`} />
 
