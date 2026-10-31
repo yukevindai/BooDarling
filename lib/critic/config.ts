@@ -37,6 +37,16 @@ export function geminiModel(): string {
   return env("GEMINI_MODEL") ?? "gemini-flash-latest";
 }
 
+/**
+ * Models tried in order when the primary model is overloaded (429/5xx) or no longer
+ * exists (404). Comma-separated GEMINI_FALLBACK_MODELS overrides; "none" disables.
+ */
+export function geminiFallbackModels(): string[] {
+  const raw = env("GEMINI_FALLBACK_MODELS") ?? "gemini-flash-lite-latest,gemini-2.5-flash";
+  if (raw.trim().toLowerCase() === "none") return [];
+  return raw.split(",").map((m) => m.trim()).filter(Boolean);
+}
+
 export function ollamaBaseUrl(): string {
   return (env("OLLAMA_BASE_URL") ?? "http://127.0.0.1:11434").replace(/\/+$/, "");
 }
