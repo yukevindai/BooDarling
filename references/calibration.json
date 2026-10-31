@@ -1,22 +1,22 @@
 {
-  "calibrationVersion": "cruella-cal-v1",
+  "calibrationVersion": "cruella-cal-202610311737",
   "modelVersion": "fashion-clip",
   "referenceVersion": "cruella-ref-v3",
-  "lowAnchor": 0.18,
-  "highAnchor": 0.34,
+  "lowAnchor": 0.3,
+  "highAnchor": 0.55,
   "anchors": {
     "unrelated": {
-      "similarity": 0.18,
-      "note": "Average winning-look similarity for an unrelated everyday outfit."
+      "similarity": 0.3,
+      "note": "Measured on the demo laptop webcam: dark navy quarter-zip jacket, 4 captures, sim 0.21-0.30. lowAnchor set at the top of that range so everyday outfits score ~0."
     },
     "partial": {
-      "similarity": 0.26,
-      "note": "Partial match — some red/two-tone cues but not a recreation."
+      "similarity": 0.485,
+      "note": "Measured: dark ('rotten tomato') red top, 1 capture, sim 0.485 -> aura ~74. Colour right, no halter/bodice/gloves."
     },
     "strong": {
-      "similarity": 0.34,
-      "note": "Strong recreation of the look."
+      "similarity": 0.55,
+      "note": "Not measured yet (no full costume available). Set above the partial red-top match so a real recreation of the gown can reach 100. Re-measure with a costume and adjust."
     }
   },
-  "notes": "Game-design calibration anchors (spec §4), NOT a statistical accuracy claim. A raw similarity of 0.76 does not mean 76% costume accuracy. These are PLACEHOLDER values; re-measure lowAnchor (unrelated) and highAnchor (strong recreation) on the actual demo setup with the same reference pipeline before freezing. Requirement: highAnchor > lowAnchor. Recalibrate whenever the encoder, preprocessing, or reference groups change."
+  "notes": "Game-design calibration anchors (spec §4), NOT a statistical accuracy claim. A raw similarity of 0.76 does not mean 76% costume accuracy. Set on 2026-10-31 with fashion-clip against cruella-ref-v3 from captures on the demo laptop webcam (upper-body framing): lowAnchor from an ordinary outfit, highAnchor chosen above a partial red-top match; the strong anchor is not yet measured. Requirement: highAnchor > lowAnchor. Recalibrate whenever the encoder, preprocessing, reference groups, camera or backdrop change."
 }
