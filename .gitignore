@@ -12,3 +12,5 @@ services/similarity/cache/
 *.safetensors
 *.onnx
 visitor-photos/
+.DS_Store
+.vercel/

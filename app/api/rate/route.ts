@@ -84,7 +84,13 @@ export async function POST(request: Request): Promise<Response> {
   try {
     upstream = await fetch(`${baseUrl.replace(/\/$/, "")}/rate`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        // Optional auth for a hosted similarity service (server-only token).
+        ...(process.env.SIMILARITY_SERVICE_TOKEN
+          ? { authorization: `Bearer ${process.env.SIMILARITY_SERVICE_TOKEN}` }
+          : {}),
+      },
       // Forward only the frozen Capture fields; never pass client-supplied anchors.
       body: JSON.stringify({
         sessionId: capture.sessionId,
