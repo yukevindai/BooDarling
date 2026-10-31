@@ -63,13 +63,13 @@ live crops). Next.js reaches this service through the server-only
 ## Reference images
 
 `public/references/cruella/red-glamour/` holds three crops of one team-provided photo
-of Cruella's crimson ball gown (`referenceVersion` `cruella-ref-v2`):
+of Cruella's crimson ball gown (`referenceVersion` `cruella-ref-v3`):
 
 | File | Framing |
 |---|---|
 | `01.jpg` | Collar to knees, matching the live capture crop (no face) |
 | `02.jpg` | Collar to hem: full gown silhouette, slit, train, gloves and cane |
-| `03.jpg` | Full look, head to hem |
+| `03.jpg` | Collar to hips, matching an upper-body webcam framing |
 
 Adding two more distinct photos of the same look would make scoring more robust
 (spec §3). After changing any image, update the manifest (`image` path,

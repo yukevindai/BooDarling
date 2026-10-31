@@ -23,7 +23,7 @@ describe("referenceImageUrl", () => {
 describe("presenceAction", () => {
   const phases: Phase[] = ["setup", "waiting", "framing", "capturing", "analysing", "results"];
   it("starts a session only on arrival while waiting", () => {
-    for (const p of phases) assert.equal(presenceAction(p, true), p === "waiting" ? "reveal" : null, p);
+    for (const p of phases) assert.equal(presenceAction(p, true), null, p); // arrival never skips the spoken phrase
   });
   it("resets on departure during a session, never from setup/waiting", () => {
     for (const p of phases) {

@@ -19,10 +19,11 @@ export function referenceImageUrl(referenceId: string): string {
 const IN_SESSION: readonly Phase[] = ["framing", "capturing", "analysing", "results"];
 
 /**
- * R2 presence (debounced) → session action (spec §2):
- * arrival while waiting starts a session; departure during a session resets it.
+ * R2 presence (debounced) → session action (spec §2).
+ * Sessions only start when the visitor speaks the phrase ("Mirror, mirror … fairest of them all")
+ * or the operator uses the fallback link — never on arrival alone. Departure during a session resets it.
  */
-export function presenceAction(phase: Phase, present: boolean): "reveal" | "reset" | null {
-  if (present) return phase === "waiting" ? "reveal" : null;
+export function presenceAction(phase: Phase, present: boolean): "reset" | null {
+  if (present) return null;
   return IN_SESSION.includes(phase) ? "reset" : null;
 }

@@ -40,11 +40,18 @@ export const CAPTURE_CONFIG = {
   secondPersonMinShoulderWidth: 0.06,
   /** Shoulder span as a fraction of frame width. */
   minShoulderWidth: 0.1,
-  maxShoulderWidth: 0.42,
+  /** Upper-body framing at a laptop webcam puts shoulders at ~0.4–0.6 of the width. */
+  maxShoulderWidth: 0.72,
   /** Horizontal distance of the body centre from frame centre (fraction of width). */
   centerTolerance: 0.2,
-  /** Need at least the knees in frame: Cruella's coat hem matters. */
-  requireLowerBody: "knees" as "knees" | "ankles",
+  /**
+   * How much of the body must be in frame before capturing.
+   * "none" (default): shoulders are enough — visitors don't need to fit their whole
+   * body in the webcam; the crop runs from just above the shoulders down to whatever
+   * clothing is visible (to the bottom of the frame when hips/legs are out of view).
+   * "hips" | "knees" | "ankles": stricter full-length framing for a standing setup.
+   */
+  requireLowerBody: "none" as "none" | "hips" | "knees" | "ankles",
   /**
    * Floor-length gowns hide the knees, so MediaPipe reports them with low
    * visibility (≈0.1–0.2 on the reference gown) while still locating them.
