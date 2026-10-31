@@ -24,19 +24,56 @@ export type GuidanceKey =
   | "show-full-outfit"
   | "hold-still"
   | "one-at-a-time"
-  | "face-mirror";
+  | "face-mirror"
+  | "dont-move";
 
 export const GUIDANCE_LINES: Record<GuidanceKey, BaronessLine> = {
-  "step-back": { id: "guidance-step-back", text: "Step back a little, darling. I need to see the whole silhouette." },
-  "step-closer": { id: "guidance-step-closer", text: "Come closer, darling. I don't critique from across the room." },
+  "step-back": { id: "guidance-step-back", text: "Step back a little, darling." },
+  "step-closer": { id: "guidance-step-closer", text: "Closer, darling. I can't see the fabric." },
   "move-left": { id: "guidance-move-left", text: "A touch to your left, darling." },
   "move-right": { id: "guidance-move-right", text: "A touch to your right, darling." },
-  center: { id: "guidance-center", text: "Centre yourself in my mirror, darling." },
-  "show-full-outfit": { id: "guidance-show-full-outfit", text: "Show me everything, top to hem. Nothing hides from me." },
-  "hold-still": { id: "guidance-hold-still", text: "Hold still. Genius cannot be rushed." },
-  "one-at-a-time": { id: "guidance-one-at-a-time", text: "One at a time, please. I only judge one disaster at a time." },
+  center: { id: "guidance-center", text: "To the centre, darling." },
+  "show-full-outfit": { id: "guidance-show-full-outfit", text: "Let me see the whole look, darling." },
+  "hold-still": { id: "guidance-hold-still", text: "Hold still. Let me look at you." },
+  "one-at-a-time": { id: "guidance-one-at-a-time", text: "One at a time, darlings." },
   "face-mirror": { id: "guidance-face-mirror", text: "Face the mirror, darling. Fashion is a frontal assault." },
+  "dont-move": { id: "guidance-dont-move", text: "Perfect. Don't move." },
 };
+
+/**
+ * R2 (`lib/capture`) reports framing as `FramingState.guidanceKey`, using its own
+ * status names. The spoken lines above match R2's on-screen captions word for word,
+ * so caption and voice agree. Statuses not listed here ("empty", "idle", "captured")
+ * mean "say nothing".
+ */
+export type FramingGuidanceKey =
+  | "multiple"
+  | "partial"
+  | "tooClose"
+  | "tooFar"
+  | "offCenter"
+  | "settling"
+  | "capturing";
+
+export const FRAMING_TO_GUIDANCE: Record<FramingGuidanceKey, GuidanceKey> = {
+  multiple: "one-at-a-time",
+  partial: "show-full-outfit",
+  tooClose: "step-back",
+  tooFar: "step-closer",
+  offCenter: "center",
+  settling: "hold-still",
+  capturing: "dont-move",
+};
+
+/** Accepts an R4 GuidanceKey or an R2 framing status; returns null when nothing should be said. */
+export function toGuidanceKey(key: string | null | undefined): GuidanceKey | null {
+  if (!key) return null;
+  if (Object.prototype.hasOwnProperty.call(GUIDANCE_LINES, key)) return key as GuidanceKey;
+  if (Object.prototype.hasOwnProperty.call(FRAMING_TO_GUIDANCE, key)) {
+    return FRAMING_TO_GUIDANCE[key as FramingGuidanceKey];
+  }
+  return null;
+}
 
 /** Flow announcements the UI may play around the assessment. */
 export type AnnouncementKey = "welcome" | "analysing" | "farewell" | "audio-test" | "unavailable";

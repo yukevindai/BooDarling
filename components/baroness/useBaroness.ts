@@ -20,7 +20,7 @@
  *    any session other than the one passed to startSession(). See `session-gate.ts`.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { AnnouncementKey, GuidanceKey } from "@/lib/critic/lines";
+import { toGuidanceKey, type AnnouncementKey, type FramingGuidanceKey, type GuidanceKey } from "@/lib/critic/lines";
 import type { Capture, CritiqueSource, RateResult } from "@/lib/critic/types";
 import { getBaronessVoice, type SpeakOutcome, type VoiceState } from "./audio";
 import { fallbackCritique, isCritiqueDiscarded, requestCritique } from "./critique-client";
@@ -52,7 +52,8 @@ export type BaronessState = {
 export type UseBaroness = BaronessState & {
   run(input: BaronessRunInput): Promise<BaronessRunOutcome>;
   startSession(sessionId: string): void;
-  guide(key: GuidanceKey, sessionId?: string): Promise<SpeakOutcome>;
+  /** Accepts an R4 GuidanceKey or R2's `FramingState.guidanceKey` directly; unknown/null keys are a no-op. */
+  guide(key: GuidanceKey | FramingGuidanceKey | (string & {}) | null, sessionId?: string): Promise<SpeakOutcome>;
   announce(key: AnnouncementKey, sessionId?: string): Promise<SpeakOutcome>;
   cancel(): void;
 };
@@ -171,10 +172,12 @@ export function useBaroness(): UseBaroness {
   );
 
   const guide = useCallback(
-    (key: GuidanceKey, sessionId?: string): Promise<SpeakOutcome> => {
+    (key: GuidanceKey | FramingGuidanceKey | (string & {}) | null, sessionId?: string): Promise<SpeakOutcome> => {
+      const guidance = toGuidanceKey(key);
+      if (!guidance) return Promise.resolve({ played: false, via: "none", reason: "no-guidance" });
       const active = voice.getActiveSession();
       if (!active) return Promise.resolve({ played: false, via: "none", reason: "no-session" });
-      return voice.playGuidance(key, sessionId ?? active);
+      return voice.playGuidance(guidance, sessionId ?? active);
     },
     [voice],
   );

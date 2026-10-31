@@ -63,7 +63,8 @@ import { useBaroness, BaronessCritique, BaronessGuidance, AudioSetupControl } fr
 
 const baroness = useBaroness();
 // Person detected (new sessionId):   baroness.startSession(sessionId);   // please do call this
-// Framing guidance from R2:          baroness.guide("step-back");    // throttled; silent once the critique starts
+// Framing guidance from R2:          <ReflectCamera onFramingChange={(f) => baroness.guide(f.guidanceKey)} />
+//                                    // throttled; null/"empty"/"captured" are no-ops; silent once the critique starts
 // Analysing (optional):              baroness.announce("analysing");
 // RateResult arrived (ok or unavailable):
 const out = await baroness.run({ capture, result });
@@ -99,9 +100,12 @@ either style. The pure decision is exported as `decideRun()` for tests.
 active, the setup button only unlocks audio (if still locked) and is otherwise
 disabled with a hint.
 
-Guidance keys (R2 → R4): `step-back`, `step-closer`, `move-left`, `move-right`,
-`center`, `show-full-outfit`, `hold-still`, `one-at-a-time`, `face-mirror`
-(`GuidanceKey` in `lib/critic/lines.ts`).
+Guidance keys: `guide()` and `<BaronessGuidance>` accept R2's
+`FramingState.guidanceKey` directly (`multiple`, `partial`, `tooClose`, `tooFar`,
+`offCenter`, `settling`, `capturing`) as well as R4's own `GuidanceKey`s. The
+spoken lines match R2's on-screen captions word for word (enforced by
+`lib/critic/lines.test.ts`). R2's `ReflectCamera` already draws the caption, so
+`<BaronessGuidance>` is optional. Mapping: `FRAMING_TO_GUIDANCE` in `lib/critic/lines.ts`.
 
 ## Dependencies on other roles
 

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { GUIDANCE_LINES, type GuidanceKey } from "@/lib/critic/lines";
+import { GUIDANCE_LINES, toGuidanceKey, type FramingGuidanceKey, type GuidanceKey } from "@/lib/critic/lines";
 import styles from "./Baroness.module.css";
 
 export type BaronessGuidanceProps = {
-  guidance?: GuidanceKey | null;
+  /** R4 GuidanceKey or R2's `FramingState.guidanceKey` (e.g. "tooClose"). */
+  guidance?: GuidanceKey | FramingGuidanceKey | (string & {}) | null;
   className?: string;
 };
 
@@ -14,7 +15,8 @@ export type BaronessGuidanceProps = {
  * out (keeping the last text while it fades) when it clears. Position it inside a
  * relatively positioned frame; override placement through `className`.
  */
-export function BaronessGuidance({ guidance, className }: BaronessGuidanceProps) {
+export function BaronessGuidance({ guidance: rawGuidance, className }: BaronessGuidanceProps) {
+  const guidance = toGuidanceKey(rawGuidance);
   const [last, setLast] = useState<GuidanceKey | null>(guidance ?? null);
   if (guidance && guidance !== last) setLast(guidance);
   const visible = !!guidance;
