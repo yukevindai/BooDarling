@@ -37,7 +37,8 @@ export function getFaceDetector(): Promise<FaceLandmarker> {
 
 let lastTs = 0;
 export type FaceBox = { x: number; y: number; width: number; height: number };
-export type FaceMetrics = { box: FaceBox; blendshapes: Blendshapes };
+export type FacePoint = { x: number; y: number };
+export type FaceMetrics = { box: FaceBox; blendshapes: Blendshapes; landmarks: FacePoint[] };
 
 /** Blendshapes for the first face, or null if no face is tracked this frame. */
 export function readBlendshapes(detector: FaceLandmarker, video: HTMLVideoElement): Blendshapes | null {
@@ -94,5 +95,6 @@ export function readFaceMetrics(detector: FaceLandmarker, video: HTMLVideoElemen
   return {
     box: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
     blendshapes: Object.fromEntries(categories.map((c) => [c.categoryName, c.score])),
+    landmarks: landmarks.map(({ x, y }) => ({ x, y })),
   };
 }
