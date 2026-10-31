@@ -1,0 +1,22 @@
+{
+  "calibrationVersion": "cruella-cal-v1",
+  "modelVersion": "fashion-clip",
+  "referenceVersion": "cruella-ref-v1",
+  "lowAnchor": 0.18,
+  "highAnchor": 0.34,
+  "anchors": {
+    "unrelated": {
+      "similarity": 0.18,
+      "note": "Average winning-look similarity for an unrelated everyday outfit."
+    },
+    "partial": {
+      "similarity": 0.26,
+      "note": "Partial match — some red/two-tone cues but not a recreation."
+    },
+    "strong": {
+      "similarity": 0.34,
+      "note": "Strong recreation of the look."
+    }
+  },
+  "notes": "Game-design calibration anchors (spec §4), NOT a statistical accuracy claim. A raw similarity of 0.76 does not mean 76% costume accuracy. These are PLACEHOLDER values; re-measure lowAnchor (unrelated) and highAnchor (strong recreation) on the actual demo setup with the same reference pipeline before freezing. Requirement: highAnchor > lowAnchor. Recalibrate whenever the encoder, preprocessing, or reference groups change."
+}

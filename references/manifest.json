@@ -1,0 +1,51 @@
+{
+  "characterId": "cruella",
+  "referenceVersion": "cruella-ref-v1",
+  "framingPolicy": {
+    "focus": "clothing",
+    "preserveAspectRatio": true,
+    "note": "Reference crops use the same clothing-focused framing policy as the live capture (spec §3). Faces are incidental; crops should not clip coat sleeves or hems."
+  },
+  "looks": [
+    {
+      "lookId": "red-glamour",
+      "characterId": "cruella",
+      "description": "Cruella's crimson statement gown — dramatic red silhouette with ivory trim and black two-tone accents. One specific look for the MVP (spec §3).",
+      "references": [
+        {
+          "referenceId": "red-glamour-01",
+          "image": "public/references/cruella/red-glamour/01.png",
+          "sourceUrl": "PLACEHOLDER — replace with the curated image source URL before the demo",
+          "description": "Full-length crimson gown, front view.",
+          "crop": {
+            "applied": true,
+            "region": "clothing",
+            "note": "Placeholder asset generated for pipeline bring-up. Swap with a curated, clothing-cropped photo; keep aspect ratio."
+          }
+        },
+        {
+          "referenceId": "red-glamour-02",
+          "image": "public/references/cruella/red-glamour/02.png",
+          "sourceUrl": "PLACEHOLDER — replace with the curated image source URL before the demo",
+          "description": "Two-tone bodice with red sash, three-quarter view.",
+          "crop": {
+            "applied": true,
+            "region": "clothing",
+            "note": "Placeholder asset generated for pipeline bring-up. Swap with a curated, clothing-cropped photo; keep aspect ratio."
+          }
+        },
+        {
+          "referenceId": "red-glamour-03",
+          "image": "public/references/cruella/red-glamour/03.png",
+          "sourceUrl": "PLACEHOLDER — replace with the curated image source URL before the demo",
+          "description": "Red ensemble with black-and-ivory detailing, detail view.",
+          "crop": {
+            "applied": true,
+            "region": "clothing",
+            "note": "Placeholder asset generated for pipeline bring-up. Swap with a curated, clothing-cropped photo; keep aspect ratio."
+          }
+        }
+      ]
+    }
+  ]
+}

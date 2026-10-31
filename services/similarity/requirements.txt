@@ -1,0 +1,9 @@
+# Reflect similarity service (R3). Pinned for reproducible demo builds.
+# CPU-only; no training or fine-tuning (spec §4).
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+transformers==4.48.0
+torch==2.5.1
+pillow==11.1.0
+numpy==2.2.1
+pydantic==2.10.5
