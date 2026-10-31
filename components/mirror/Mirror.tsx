@@ -272,6 +272,7 @@ export default function Mirror() {
 
       <header className="head">
         <h1 className="title glitch" data-text="Boo, Darling!">Boo, Darling!</h1>
+        <br>
         <p className="tag">Mirror, mirror on the wall… who’s the fairest of them all?</p>
         <p className="tag tag2">Let the Baroness judge you.</p>
       </header>
