@@ -112,10 +112,25 @@ export async function POST(request: Request): Promise<Response> {
       cache: "no-store",
     });
   } catch (err) {
-    const reason =
-      err instanceof Error && err.name === "AbortError"
-        ? "Similarity service timed out."
-        : "Similarity service is unreachable.";
+    const timedOut = err instanceof Error && err.name === "AbortError";
+    const reason = timedOut
+      ? "Similarity service timed out."
+      : "Similarity service is unreachable.";
+    // Node's fetch hides the real network error (ECONNREFUSED = service not
+    // running, ENOTFOUND = stale/wrong tunnel host) in err.cause; surface it to the
+    // operator's terminal. Origin only: never log tokens or image data.
+    const cause = (err as { cause?: { code?: string; message?: string } })?.cause;
+    let origin = baseUrl;
+    try {
+      origin = new URL(baseUrl).origin;
+    } catch {
+      // keep the raw value; an invalid URL is itself the problem
+    }
+    console.error(
+      `[rate] ${timedOut ? "timeout" : "unreachable"} url=${origin} ` +
+        `cause=${cause?.code ?? cause?.message ?? (err as Error)?.message ?? String(err)}` +
+        (timedOut ? "" : " (is services/similarity/app.py running, and does SIMILARITY_SERVICE_URL point at it?)")
+    );
     return json(unavailable(sessionId, reason), 502);
   } finally {
     clearTimeout(timer);
