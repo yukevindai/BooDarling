@@ -2,11 +2,21 @@
 
 # Boo, Darling!
 ## Run
+Scoring needs the Python similarity service running alongside Next.js; without it
+every rating shows "Similarity service is unreachable." First-time setup is in
+[`services/similarity/README.md`](services/similarity/README.md). Terminal 1:
+```powershell
+services\similarity\.venv\Scripts\activate          # macOS/Linux: source services/similarity/.venv/bin/activate
+python services/similarity/prepare_references.py    # once, and after reference changes
+python services/similarity/app.py                   # http://127.0.0.1:8000/health should report "ready": true
+```
+Terminal 2:
 ```powershell
 npm install
-copy .env.example .env.local   # fill in keys (server-side only)
+copy .env.example .env.local   # fill in keys (server-side only); SIMILARITY_SERVICE_URL=http://127.0.0.1:8000
 npm run dev                    # http://localhost:3000 (use Chrome/Edge for speech recognition)
 ```
+On Vercel, the service runs on the laptop behind a tunnel: see [`docs/deploy-vercel.md`](docs/deploy-vercel.md).
 Click **Open the dressing room** once (camera + audio unlock). Say "Mirror, mirror on the wall, who's the fairest of them all?" or use the fallback link.
 
 ## What works now (all mocks)
